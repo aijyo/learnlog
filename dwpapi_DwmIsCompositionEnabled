@@ -1,0 +1,23 @@
+HMODULE fnInitDwmapi()
+{
+  HMODULE result; // rax
+
+  hDwmapiDll = LoadLibraryW(L"dwmapi.dll");
+  result = LoadLibraryW(L"uxtheme.dll");
+  hUxthemeDLL = result;
+  if ( hDwmapiDll )
+  {
+    fnDwmIsCompositionEnabled = (__int64 (__fastcall *)(_QWORD))GetProcAddress(hDwmapiDll, "DwmIsCompositionEnabled");
+    fnDwmGetWindowAttribute = (__int64)GetProcAddress(hDwmapiDll, "DwmGetWindowAttribute");
+    result = hUxthemeDLL;
+  }
+  if ( result )
+  {
+    fnDrawThemeTextEx = (__int64)GetProcAddress(result, "DrawThemeTextEx");
+    fnOpenThemeData = (__int64)GetProcAddress(hUxthemeDLL, "OpenThemeData");
+    fnCloseThemeData = (__int64)GetProcAddress(hUxthemeDLL, "CloseThemeData");
+    result = (HMODULE)GetProcAddress(hUxthemeDLL, "GetThemeSysFont");
+    fnGetThemeSysFont = (__int64)result;
+  }
+  return result;
+}
