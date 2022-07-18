@@ -1,0 +1,75 @@
+刚开始的实现是基于RGBA，需要使用sws_scale将AVFrame像素格式转换成RGBA，然后更新纹理（格式为DXGI_FORMAT_R8G8B8A8_UNORM）。这里就有两个选择：第一种是创建纹理时选择D3D11_USAGE_DEFAULT类型的内存，然后只用UpdateSubresource来更新纹理；第二种是选择D3D11_USAGE_DYNAMIC类型的内存，加上D3D11_CPU_ACCESS_WRITE标记，这样可以使用 Map/memcpy/Unmap模式来更新纹理。比较而言，前者的效率更高些。
+
+这里有一个坑：当显示全尺寸的图像时没什么问题。但是当播放器窗口较小时，就会黑屏（静止），最后发现是创建纹理缓存时，没有指定MipLevels=1，所以导致后续的更新纹理操作都只更新了原始的那个纹理。
+
+后来考虑到sws_scale只是CPU处理，而且RGBA数据比原始的YUV420P要大很多，占用带宽，相同大小的YUV420P数据量只相当于RGBA像素格式的 6/16（以每4像素算，前者6字节，后者16字节）。既然YUV420P分为3个plane，每个plane都可以视为一个纹理，那么直接使用3个纹理也是没问题的。
+
+搜索到 https://www.cnblogs.com/betterwgo/p/6131723.html 实现的和这个最接近（感谢前辈），但代码包括shader都是 d3d9 的，把它转成 d3d11
+1.创建纹理方面的代码如下：
+// ID3D11ShaderResourceView* resourceViewPlanes_[3];
+// ID3D11Texture2D *texturePlanes_[3];
+CD3D11_TEXTURE2D_DESC textureDesc(DXGI_FORMAT_R8_UNORM, width, height);
+textureDesc.MipLevels = 1;
+hr = device->CreateTexture2D(&textureDesc, NULL, &texturePlanes_[0]);
+textureDesc.Width = width/2; textureDesc.Height = height/2;
+hr = device->CreateTexture2D(&textureDesc, NULL, &texturePlanes_[1]);
+hr = device->CreateTexture2D(&textureDesc, NULL, &texturePlanes_[2]);
+CD3D11_SHADER_RESOURCE_VIEW_DESC resourceViewDesc(D3D11_SRV_DIMENSION_TEXTURE2D);
+for (int i = 0; i < 3; ++i)
+    device->CreateShaderResourceView(texturePlanes_[i], &resourceViewDesc, &resourceViewPlanes_[i]);
+
+2.更新纹理代码如下：
+//AVFrame *frame，保证是 AV_PIX_FMT_YUV420P
+for (int i = 0; i < 3; ++i)
+    deviceCtx->UpdateSubresource(texturePlanes_[i], 0, NULL, frame->data[i], frame->linesize[i], 0);
+
+3.渲染时代码如下：
+deviceCtx->PSSetShaderResources(0, 3, resourceViewPlanes_);//3个纹理一次传入，SamplerState 传入就省略了
+
+4.shader代码如下：
+
+struct VSInput
+{
+    float4 position : POSITION;
+    float2 tex : TEXCOORD0;
+};
+struct PSInput
+{
+    float4 position : SV_POSITION;
+    float2 tex : TEXCOORD0;
+};
+//vertex shader
+cbuffer MatrixBuffer
+{
+    matrix mvp;
+};
+PSInput VS(VSInput input)
+{
+    PSInput output;
+    input.position.w = 1.0f;
+    output.position = mul(input.position, mvp);
+    output.tex = input.tex;
+    return output;
+}
+//pixel shader
+Texture2D u_texY;
+Texture2D u_texU;
+Texture2D u_texV;
+SamplerState SampleType;
+float4 PS(PSInput input) : SV_TARGET
+{
+    float y = u_texY.Sample(SampleType, input.tex).r;
+    float u = u_texU.Sample(SampleType, input.tex).r  - 0.5f;
+    float v = u_texV.Sample(SampleType, input.tex).r  - 0.5f;
+    float r = y + 1.14f * v;
+    float g = y - 0.394f * u - 0.581f * v;
+    float b = y + 2.03f * u;
+    return float4(r,g,b, 1.0f);
+}
+
+
+这里又有个坑：当你创建纹理缓存时指定的DXGI_FORMAT_R8_UNORM和 shader 内 PS 函数获取采样色彩后分量不一致时，会没有效果。我当时指定 DXGI_FORMAT_A8_UNORM，获取时写 float y = u_texY.Sample(SampleType, input.tex).r，注意最后那个 .r，这时候需要把 .r 改为 .a，或者将DXGI_FORMAT_A8_UNORM改为DXGI_FORMAT_R8_UNORM。
+改完之后，绘制效率提升不少。
+
+代码主体参考了 http://www.rastertek.com/dx11tut07.html
+三纹理处理方案参考了 https://www.cnblogs.com/betterwgo/p/6131723.html
