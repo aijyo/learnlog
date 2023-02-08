@@ -1,0 +1,28 @@
+import os
+import win32api
+import win32con
+
+def extract_resource(exe_file, resource_type, resource_name, output_folder):
+    try:
+        # Open the EXE file
+        exe = win32api.LoadLibraryEx(exe_file, 0, win32con.LOAD_LIBRARY_AS_DATAFILE)
+
+        # Find the specified resource
+        resource = win32api.FindResource(exe, resource_type, resource_name)
+        if not resource:
+            raise Exception("Resource not found")
+
+        # Load the resource
+        data = win32api.LoadResource(exe, resource_type, resource_name)
+
+        # Write the resource data to a file
+        output_file = os.path.join(output_folder, resource_name)
+        with open(output_file, "wb") as f:
+            f.write(data)
+
+        print("Resource extracted to:", output_file)
+    except Exception as e:
+        print("Failed to extract resource:", e)
+
+# Example usage
+extract_resource("example.exe", win32con.RT_ICON, "IDI_ICON1", "output")
