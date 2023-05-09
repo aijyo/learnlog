@@ -1,0 +1,14 @@
+eg:
+.\shaderc.exe -f .\vs_image_rgba.sc -o ./vs_image_rgba.bin -i "D:\code\work\bgfx\examples" -i "D:\code\work\bgfx\src" --type v --platform windows -p s_4_0
+.\shaderc.exe -f .\fs_image_rgba.sc -o ./fs_image_rgba.bin -i "D:\code\work\bgfx\examples" -i "D:\code\work\bgfx\src" --type f --platform windows -p s_4_0
+
+注意事项：
+-f 指定输入文件
+-o 指定输出文件
+-i 指定 include path
+--type 指定shader类型
+--platform windows 指定shader运行平台
+-p 指定shader的版本？ 
+只是常用的指定，一定要记得指定-p, 不然很容易出现编译出结果，没有报错但是运行时候出错。
+
+
