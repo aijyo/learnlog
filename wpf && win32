@@ -1,0 +1,66 @@
+在 WPF 中，HwndHost 是一个特殊的控件，用于在 WPF 应用程序中承载原生的 Win32 窗口。默认情况下，HwndHost 控件会覆盖其上层的 WPF 控件，因此在以 HwndHost 为内容的子窗口上方显示 WPF 控件会有一定的困难。
+
+然而，您可以通过一些技巧来实现在以 HwndHost 为内容的子窗口上方显示 WPF 控件的效果。以下是一种可能的解决方案：
+
+创建自定义的 HwndHost 子类：首先，创建一个自定义的 HwndHost 子类，该子类支持在其上方绘制 WPF 控件。
+csharp
+Copy code
+using System;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Interop;
+
+public class CustomHwndHost : HwndHost
+{
+    private IntPtr hwnd;
+    private HwndSource hwndSource;
+
+    public CustomHwndHost(IntPtr hwnd)
+    {
+        this.hwnd = hwnd;
+    }
+
+    protected override HandleRef BuildWindowCore(HandleRef hwndParent)
+    {
+        hwndSource = new HwndSource(new HwndSourceParameters()
+        {
+            ParentWindow = hwndParent.Handle,
+            WindowStyle = NativeMethods.WS_VISIBLE | NativeMethods.WS_CHILD,
+            UsesPerPixelOpacity = true
+        });
+
+        hwndSource.CompositionTarget.BackgroundColor = Colors.Transparent;
+        hwndSource.RootVisual = new Grid(); // 使用一个透明的 Grid 作为根元素
+
+        return new HandleRef(this, hwndSource.Handle);
+    }
+
+    protected override void DestroyWindowCore(HandleRef hwnd)
+    {
+        hwndSource?.Dispose();
+        hwndSource = null;
+    }
+
+    // 引用 Win32 API
+    private static class NativeMethods
+    {
+        public const int WS_CHILD = 0x40000000;
+        public const int WS_VISIBLE = 0x10000000;
+    }
+}
+在 CustomHwndHost 类中，我们使用 hwnd 参数将自定义的 Win32 窗口与 HwndSource 关联，并使用一个透明的 Grid 作为 HwndSource 的根元素。
+
+在 WPF 窗口中使用 CustomHwndHost 控件：在您的 WPF 窗口或用户控件的 XAML 中，使用 CustomHwndHost 控件来承载自定义的 Win32 窗口。
+xml
+Copy code
+<Grid>
+    <local:CustomHwndHost x:Name="customHwndHost" />
+    <Button Content="WPF Button" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0" />
+</Grid>
+在上述示例中，我们在 CustomHwndHost 控件下方添加了一个 Button 控件，以便它可以显示在自定义 Win32 窗口的上方。
+
+将 Win32 窗口与 CustomHwndHost 关联：在代码中，将自定义的 Win32 窗口与 CustomHwndHost 控件关联。
+csharp
+Copy code
+// 将 Win32 窗口与 CustomHwndHost 控件关联
+customHwndHost.Child = new CustomHwnd
