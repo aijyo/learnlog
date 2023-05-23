@@ -1,0 +1,10 @@
+CLI 项目属性==》配置属性==》高级可以配置.Net版本
+
+
+然后再WPF 项目中添加对应项目引用即可。
+
+多国语言
+Properties==》Langs 除了默认的lang.resx 需要设置访问修饰符为public之外其它的改为无代码生成
+
+文本模板：
+langProvider.tt 在修改lang.resx文件后需要删除LangProvider.cs 再重新生成LangProvider.cs 才会有新的字符串。
