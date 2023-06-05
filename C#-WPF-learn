@@ -1,0 +1,20 @@
+
+    public class VideoItemModel : ObservableObject
+    {
+        // 这样不会触发OnPropertyChanged 
+        public string BackgroundToken { get; set; }
+        
+        // 想要触发OnPropertyChanged 得这样。
+        private string ImagePath_ = string.Empty;
+
+        public string ImagePath
+        {
+            get => ImagePath_;
+#if NET40
+        set => Set(nameof(ImagePath), ref ImagePath_, value);
+#else
+            set => Set(ref ImagePath_, value);
+#endif
+        }
+
+    }
