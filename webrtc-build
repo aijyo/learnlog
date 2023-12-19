@@ -1,0 +1,35 @@
+https://blog.csdn.net/caoshangpa/article/details/114494226
+
+mkdir webrtc-checkout #这是创建一个目录，当然也可以用鼠标创建。
+cd webrtc-checkout #进入到我们刚刚创建的目录中
+fetch --nohooks webrtc #获取代码，这一步会花点时间，一般会失败，反正我试了几次都失败了
+gclient sync # 当过程中断时（包括上一步的失败），我们可以使用该命令恢复并继续
+
+
+# 设置vs2017环境变量
+set GYP_MSVS_VERSON=2017
+set vs2019_install=C:\Program Files (x86)\Microsoft Visual Studio\2017\Community
+set GYP_MSVS_OVERRIDE_PATH=C:\Program Files (x86)\Microsoft Visual Studio\2017\Community
+
+# 设置vs2019环境变量
+set GYP_MSVS_VERSON=2019
+set vs2019_install="C:\Program Files (x86)\Microsoft Visual Studio\2019\Community"
+set GYP_MSVS_OVERRIDE_PATH="C:\Program Files (x86)\Microsoft Visual Studio\2019\Community"
+
+set GYP_GENERATORS=msvs-ninja,ninja
+# 通知depot_tools应用咱们本机的VS进行编译
+set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+
+# 编译vs2017 release：
+gn gen out\Release-vs2017 --ide=vs2017 --args="is_debug=false target_os=\"win\" target_cpu=\"x64\" is_component_build=false is_clang=false use_lld=false treat_warnings_as_errors=false use_rtti=true rtc_include_tests=false rtc_build_examples=false"
+ninja -C out\Release-vs2017
+
+# 编译vs2019 release：
+gn gen out\Release-vs2019 --ide=vs2019 --args="is_debug=false target_os=\"win\" target_cpu=\"x64\" is_component_build=false is_clang=false use_lld=false treat_warnings_as_errors=false use_rtti=true rtc_include_tests=false rtc_build_examples=false"
+ninja -C out\Release-vs2019
+
+
+
+# 编译vs2019 release：
+gn gen out\default --ide=vs2019 --args="is_debug=true target_os=win target_cpu=x64 is_component_build=false is_clang=false use_lld=false treat_warnings_as_errors=false use_rtti=true rtc_include_tests=false rtc_build_examples=false"
+ninja -C out\default
