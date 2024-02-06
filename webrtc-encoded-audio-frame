@@ -1,0 +1,319 @@
+hook data:
+void RecordClient::OnTrack(rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver)
+
+rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver = transceiver->receiver();
+
+receiver->SetDepacketizerToDecoderFrameTransformer()
+
+data source:
+>	webrtc-client.dll!webrtc::voe::`anonymous namespace'::ChannelReceive::ReceivePacket(const unsigned char * packet, unsigned __int64 packet_length, const webrtc::RTPHeader & header) 行 713	C++
+ 	webrtc-client.dll!webrtc::voe::`anonymous namespace'::ChannelReceive::OnRtpPacket(const webrtc::RtpPacketReceived & packet) 行 669	C++
+ 	webrtc-client.dll!webrtc::RtpDemuxer::OnRtpPacket(const webrtc::RtpPacketReceived & packet) 行 262	C++
+ 	webrtc-client.dll!webrtc::RtpStreamReceiverController::OnRtpPacket(const webrtc::RtpPacketReceived & packet) 行 52	C++
+ 	webrtc-client.dll!webrtc::internal::Call::DeliverRtp(webrtc::MediaType media_type, rtc::CopyOnWriteBuffer packet, __int64 packet_time_us) 行 1597	C++
+ 	webrtc-client.dll!webrtc::internal::Call::DeliverPacket(webrtc::MediaType media_type, rtc::CopyOnWriteBuffer packet, __int64 packet_time_us) 行 1628	C++
+ 	webrtc-client.dll!cricket::WebRtcVoiceMediaChannel::OnPacketReceived::<lambda_1>::operator()() 行 2183	C++
+ 	webrtc-client.dll!webrtc::webrtc_new_closure_impl::SafetyClosureTask<`lambda at ../../../../../webrtcNAVER/src/media/engine/webrtc_voice_engine.cc:2179:55'>::Run() 行 51	C++
+ 	webrtc-client.dll!rtc::Thread::QueuedTaskHandler::OnMessage(rtc::Message * msg) 行 1031	C++
+ 	webrtc-client.dll!rtc::Thread::Dispatch(rtc::Message * pmsg) 行 701	C++
+ 	webrtc-client.dll!rtc::Thread::ProcessMessages(int cmsLoop) 行 1146	C++
+ 	webrtc-client.dll!rtc::Thread::Run() 行 891	C++
+ 	webrtc-client.dll!rtc::Thread::PreRun(void * pv) 行 881	C++
+
+
+也可以 在neteq impl中加入自己的代码（ // on packet list ））:
+neteq-impl 的data来自channel_receive.cc   OnReceivedPayloadData(payload_data, header);
+而上面的SetDepacketizerToDecoderFrameTransformer回调得到的数据则位于这个之前回调给用户。
+
+    int NetEqImpl::InsertPacketInternal(const webrtc::RTPHeader& rtp_header,
+        rtc::ArrayView<const uint8_t> payload) {
+        if (payload.empty()) {
+            RTC_LOG_F(LS_ERROR) << "payload is empty";
+            return kInvalidPointer;
+        }
+
+        webrtc::Timestamp receive_time = clock_->CurrentTime();
+        stats_->ReceivedPacket();
+
+        webrtc::PacketList packet_list;
+        // Insert packet in a packet list.
+        packet_list.push_back([&rtp_header, &payload, &receive_time] {
+            // Convert to Packet.
+            webrtc::Packet packet;
+            packet.payload_type = rtp_header.payloadType;
+            packet.sequence_number = rtp_header.sequenceNumber;
+            packet.timestamp = rtp_header.timestamp;
+            packet.payload.SetData(payload.data(), payload.size());
+            packet.packet_info = webrtc::RtpPacketInfo(rtp_header, receive_time);
+            // Waiting time will be set upon inserting the packet in the buffer.
+            RTC_DCHECK(!packet.waiting_time);
+            return packet;
+            }());
+
+        bool update_sample_rate_and_channels = first_packet_;
+
+        if (update_sample_rate_and_channels) {
+            // Reset timestamp scaling.
+            timestamp_scaler_->Reset();
+        }
+
+        if (!decoder_database_->IsRed(rtp_header.payloadType)) {
+            // Scale timestamp to internal domain (only for some codecs).
+            timestamp_scaler_->ToInternal(&packet_list);
+        }
+
+        // Store these for later use, since the first packet may very well disappear
+        // before we need these values.
+        uint32_t main_timestamp = packet_list.front().timestamp;
+        uint8_t main_payload_type = packet_list.front().payload_type;
+        uint16_t main_sequence_number = packet_list.front().sequence_number;
+
+        // Reinitialize NetEq if it's needed (changed SSRC or first call).
+        if (update_sample_rate_and_channels) {
+            // Note: `first_packet_` will be cleared further down in this method, once
+            // the packet has been successfully inserted into the packet buffer.
+
+            // Flush the packet buffer and DTMF buffer.
+            packet_buffer_->Flush(stats_.get());
+            dtmf_buffer_->Flush();
+
+            // Update audio buffer timestamp.
+            sync_buffer_->IncreaseEndTimestamp(main_timestamp - timestamp_);
+
+            // Update codecs.
+            timestamp_ = main_timestamp;
+        }
+
+        if (nack_enabled_) {
+            RTC_DCHECK(nack_);
+            if (update_sample_rate_and_channels) {
+                nack_->Reset();
+            }
+            nack_->UpdateLastReceivedPacket(main_sequence_number, main_timestamp);
+        }
+
+        // Check for RED payload type, and separate payloads into several packets.
+        if (decoder_database_->IsRed(rtp_header.payloadType)) {
+            if (!red_payload_splitter_->SplitRed(&packet_list)) {
+                return kRedundancySplitError;
+            }
+            // Only accept a few RED payloads of the same type as the main data,
+            // DTMF events and CNG.
+            red_payload_splitter_->CheckRedPayloads(&packet_list, *decoder_database_);
+            if (packet_list.empty()) {
+                return kRedundancySplitError;
+            }
+        }
+
+        // Check payload types.
+        if (decoder_database_->CheckPayloadTypes(packet_list) ==
+            webrtc::DecoderDatabase::kDecoderNotFound) {
+            return kUnknownRtpPayloadType;
+        }
+
+        RTC_DCHECK(!packet_list.empty());
+
+        // Update main_timestamp, if new packets appear in the list
+        // after RED splitting.
+        if (decoder_database_->IsRed(rtp_header.payloadType)) {
+            timestamp_scaler_->ToInternal(&packet_list);
+            main_timestamp = packet_list.front().timestamp;
+            main_payload_type = packet_list.front().payload_type;
+            main_sequence_number = packet_list.front().sequence_number;
+        }
+
+        // Process DTMF payloads. Cycle through the list of packets, and pick out any
+        // DTMF payloads found.
+        webrtc::PacketList::iterator it = packet_list.begin();
+        while (it != packet_list.end()) {
+            const webrtc::Packet& current_packet = (*it);
+            RTC_DCHECK(!current_packet.payload.empty());
+            if (decoder_database_->IsDtmf(current_packet.payload_type)) {
+                webrtc::DtmfEvent event;
+                int ret = webrtc::DtmfBuffer::ParseEvent(current_packet.timestamp,
+                    current_packet.payload.data(),
+                    current_packet.payload.size(), &event);
+                if (ret != webrtc::DtmfBuffer::kOK) {
+                    return kDtmfParsingError;
+                }
+                if (dtmf_buffer_->InsertEvent(event) != webrtc::DtmfBuffer::kOK) {
+                    return kDtmfInsertError;
+                }
+                it = packet_list.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+
+        webrtc::PacketList parsed_packet_list;
+        bool is_dtx = false;
+        while (!packet_list.empty()) {
+            webrtc::Packet& packet = packet_list.front();
+            const webrtc::DecoderDatabase::DecoderInfo* info =
+                decoder_database_->GetDecoderInfo(packet.payload_type);
+            if (!info) {
+                RTC_LOG(LS_WARNING) << "SplitAudio unknown payload type";
+                return kUnknownRtpPayloadType;
+            }
+
+            if (info->IsComfortNoise()) {
+                // Carry comfort noise packets along.
+                parsed_packet_list.splice(parsed_packet_list.end(), packet_list,
+                    packet_list.begin());
+            }
+            else {
+                const auto sequence_number = packet.sequence_number;
+                const auto payload_type = packet.payload_type;
+                const webrtc::Packet::Priority original_priority = packet.priority;
+                const auto& packet_info = packet.packet_info;
+                auto packet_from_result = [&](webrtc::AudioDecoder::ParseResult& result) {
+                    webrtc::Packet new_packet;
+                    new_packet.sequence_number = sequence_number;
+                    new_packet.payload_type = payload_type;
+                    new_packet.timestamp = result.timestamp;
+                    new_packet.priority.codec_level = result.priority;
+                    new_packet.priority.red_level = original_priority.red_level;
+                    new_packet.packet_info = packet_info;
+                    new_packet.frame = std::move(result.frame);
+                    return new_packet;
+                };
+
+                std::vector<webrtc::AudioDecoder::ParseResult> results =
+                    info->GetDecoder()->ParsePayload(std::move(packet.payload),
+                        packet.timestamp);
+                if (results.empty()) {
+                    packet_list.pop_front();
+                }
+                else {
+                    bool first = true;
+                    for (auto& result : results) {
+                        RTC_DCHECK(result.frame);
+                        RTC_DCHECK_GE(result.priority, 0);
+                        is_dtx = is_dtx || result.frame->IsDtxPacket();
+                        if (first) {
+                            // Re-use the node and move it to parsed_packet_list.
+                            packet_list.front() = packet_from_result(result);
+                            parsed_packet_list.splice(parsed_packet_list.end(), packet_list,
+                                packet_list.begin());
+                            first = false;
+                        }
+                        else {
+                            parsed_packet_list.push_back(packet_from_result(result));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Calculate the number of primary (non-FEC/RED) packets.
+        const size_t number_of_primary_packets = std::count_if(
+            parsed_packet_list.begin(), parsed_packet_list.end(),
+            [](const webrtc::Packet& in) { return in.priority.codec_level == 0; });
+        if (number_of_primary_packets < parsed_packet_list.size()) {
+            stats_->SecondaryPacketsReceived(parsed_packet_list.size() -
+                number_of_primary_packets);
+        }
+
+        {
+            // on packet list 
+            for (auto& packet : parsed_packet_list)
+            {
+                const webrtc::DecoderDatabase::DecoderInfo* info =
+                    decoder_database_->GetDecoderInfo(packet.payload_type);
+                std::uint32_t sample_rate = info->SampleRateHz();
+                std::uint32_t num_of_channles = info->GetDecoder()->Channels();
+                NetEqDatacenter::instance().on_packet(group_, packet, sample_rate, num_of_channles);
+            }
+
+        }
+        // Insert packets in buffer.
+        const int target_level_ms = controller_->TargetLevelMs();
+        const int ret = packet_buffer_->InsertPacketList(
+            &parsed_packet_list, *decoder_database_, &current_rtp_payload_type_,
+            &current_cng_rtp_payload_type_, stats_.get(), decoder_frame_length_,
+            last_output_sample_rate_hz_, target_level_ms);
+
+
+        bool buffer_flush_occured = false;
+        if (ret == webrtc::PacketBuffer::kFlushed) {
+            // Reset DSP timestamp etc. if packet buffer flushed.
+            new_codec_ = true;
+            update_sample_rate_and_channels = true;
+            buffer_flush_occured = true;
+        }
+        else if (ret == webrtc::PacketBuffer::kPartialFlush) {
+            // Forward sync buffer timestamp
+            timestamp_ = packet_buffer_->PeekNextPacket()->timestamp;
+            sync_buffer_->IncreaseEndTimestamp(timestamp_ -
+                sync_buffer_->end_timestamp());
+            buffer_flush_occured = true;
+        }
+        else if (ret != webrtc::PacketBuffer::kOK) {
+            return kOtherError;
+        }
+
+        if (first_packet_) {
+            first_packet_ = false;
+            // Update the codec on the next GetAudio call.
+            new_codec_ = true;
+            RTC_LOG(LS_WARNING) << "first_packet_ ssrc[" << rtp_header.ssrc << "].";
+        }
+
+        if (current_rtp_payload_type_) {
+            RTC_DCHECK(decoder_database_->GetDecoderInfo(*current_rtp_payload_type_))
+                << "Payload type " << static_cast<int>(*current_rtp_payload_type_)
+                << " is unknown where it shouldn't be";
+        }
+
+        if (update_sample_rate_and_channels && !packet_buffer_->Empty()) {
+            // We do not use `current_rtp_payload_type_` to |set payload_type|, but
+            // get the next RTP header from `packet_buffer_` to obtain the payload type.
+            // The reason for it is the following corner case. If NetEq receives a
+            // CNG packet with a sample rate different than the current CNG then it
+            // flushes its buffer, assuming send codec must have been changed. However,
+            // payload type of the hypothetically new send codec is not known.
+            const webrtc::Packet* next_packet = packet_buffer_->PeekNextPacket();
+            RTC_DCHECK(next_packet);
+            const int payload_type = next_packet->payload_type;
+            size_t channels = 1;
+            if (!decoder_database_->IsComfortNoise(payload_type)) {
+                webrtc::AudioDecoder* decoder = decoder_database_->GetDecoder(payload_type);
+                RTC_DCHECK(decoder);  // Payloads are already checked to be valid.
+                channels = decoder->Channels();
+            }
+            const webrtc::DecoderDatabase::DecoderInfo* decoder_info =
+                decoder_database_->GetDecoderInfo(payload_type);
+            RTC_DCHECK(decoder_info);
+            if (decoder_info->SampleRateHz() != fs_hz_ ||
+                channels != algorithm_buffer_->Channels()) {
+                SetSampleRateAndChannels(decoder_info->SampleRateHz(), channels);
+            }
+            if (nack_enabled_) {
+                RTC_DCHECK(nack_);
+                // Update the sample rate even if the rate is not new, because of Reset().
+                nack_->UpdateSampleRate(fs_hz_);
+            }
+        }
+
+        const webrtc::DecoderDatabase::DecoderInfo* dec_info =
+            decoder_database_->GetDecoderInfo(main_payload_type);
+        RTC_DCHECK(dec_info);  // Already checked that the payload type is known.
+
+        webrtc::NetEqController::PacketArrivedInfo info;
+        info.is_cng_or_dtmf = dec_info->IsComfortNoise() || dec_info->IsDtmf();
+        info.packet_length_samples =
+            number_of_primary_packets * decoder_frame_length_;
+        info.main_timestamp = main_timestamp;
+        info.main_sequence_number = main_sequence_number;
+        info.is_dtx = is_dtx;
+        info.buffer_flush = buffer_flush_occured;
+
+        const bool should_update_stats = !new_codec_;
+        auto relative_delay =
+            controller_->PacketArrived(fs_hz_, should_update_stats, info);
+        if (relative_delay) {
+            stats_->RelativePacketArrivalDelay(relative_delay.value());
+        }
+        return 0;
+    }
