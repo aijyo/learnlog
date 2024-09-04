@@ -1,0 +1,14 @@
+https://gist.github.com/kaypee90/48f4a5b16c79ab1a0e3a256c7d3937a7
+Scan Rust source code with Sonarqube
+Sonarqube currently does't have rust support.
+To scan sonarqube you will need Clippy to generate a json report file
+You will also need Sonar-Rust, a rust plugin for sonarqube to read the results generated in clippy report file.
+Resources
+Link to rust-clippy - https://github.com/rust-lang/rust-clippy
+Link to sonar-rust - https://github.com/elegoff/sonar-rust
+Steps
+Install clippy
+Add sonar-rust to sonarqube plugins
+Generate clippy report file on your rust project using cargo clippy --message-format=json &> sample-report.json
+Start sonarqube and pass the generated clippy report to it using sonar-scanner -Dsonar.rust.clippy.reportPaths=sample-report.json
+Login to sonarqube and view your resutls after.
