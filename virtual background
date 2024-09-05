@@ -1,5 +1,7 @@
 模型转换为 onnxruntime https://onnxruntime.ai/
 然后再opencv中调用
+参考：
+https://github.com/aktapaz/obs-backgroundremoval/blob/main/src/background-filter.cpp
 
 #include <onnxruntime_cxx_api.h>
 #include "model.h"
