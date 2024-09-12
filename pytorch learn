@@ -1,0 +1,5 @@
+pytorch document：
+https://pytorch.org/docs/stable/notes/get_start_xpu.html
+
+pytorch git book:
+https://github.com/zergtant/pytorch-handbook/blob/master/chapter1/5_data_parallel_tutorial.ipynb
