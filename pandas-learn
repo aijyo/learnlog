@@ -1,0 +1,579 @@
+https://blog.csdn.net/a13407142317/article/details/140587075
+1.复杂查询
+在 Pandas 中进行复杂查询可以使用多种方法，包括使用布尔索引、query() 方法以及通过条件表达式组合来达到复杂的数据筛选。这些技巧在处理大型数据集时尤为有用，可以有效地筛选出符合特定条件的数据子集。下面我将详细介绍一些进行复杂查询的高级技巧。
+
+1. 使用布尔索引
+布尔索引是使用布尔向量来索引数据的方法。当你需要基于多个条件筛选数据时，可以组合使用多个布尔表达式。
+
+import pandas as pd
+
+# 示例数据
+data = {'name': ['Alice', 'Bob', 'Charlie', 'David', 'Edward'],
+        'age': [24, 27, 22, 32, 29],
+        'city': ['New York', 'Los Angeles', 'New York', 'Chicago', 'Los Angeles'],
+        'score': [88, 92, 87, 74, 85]}
+df = pd.DataFrame(data)
+
+# 复杂查询：年龄大于25且分数大于80
+filtered_df = df[(df['age'] > 25) & (df['score'] > 80)]
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+2. 使用 query() 方法
+query() 方法允许你使用字符串形式的表达式来筛选数据。这使得代码更加简洁，尤其是在条件较为复杂的时候。
+
+# 使用 query 方法进行复杂查询
+filtered_df = df.query('age > 25 and score > 80')
+1
+2
+3. 结合使用多个条件和函数
+有时候你可能需要结合使用多个条件和函数，比如根据函数结果来过滤数据。
+
+# 根据自定义函数过滤：选择名字中有偶数个字符的记录
+filtered_df = df[df['name'].apply(lambda x: len(x) % 2 == 0)]
+1
+2
+4. 使用 isin() 和 between()
+isin() 和 between() 是 Pandas 提供的两个非常有用的方法，用于筛选特定范围的数据或匹配特定的值列表。
+
+# 使用 isin() 查询特定城市的人
+filtered_df = df[df['city'].isin(['New York', 'Chicago'])]
+
+# 使用 between() 查询特定年龄范围的人
+filtered_df = df[df['age'].between(25, 30)]
+1
+2
+3
+4
+5
+5. 跨越多个DataFrame的复杂查询
+当操作多个 DataFrame 时，你可以先合并这些 DataFrame，然后再进行复杂的查询。
+
+# 假设有另一个DataFrame
+other_data = {'id': [1, 2, 3, 4, 5],
+              'salary': [50000, 60000, 55000, 65000, 70000]}
+other_df = pd.DataFrame(other_data)
+
+# 合并 DataFrame
+merged_df = pd.concat([df, other_df], axis=1)
+
+# 查询合并后的 DataFrame
+filtered_df = merged_df.query('age > 25 and salary > 60000')
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+2.数据类型转换
+在 Pandas 中，数据类型转换是一项常见且重要的操作，因为正确的数据类型可以确保数据分析和计算的准确性。下面是几种常见的数据类型转换方法和使用场景：
+
+1. 转换为数值类型
+使用 pd.to_numeric() 方法可以将列转换为数值类型。这在数据导入后常常需要进行，尤其是当数据源自文本文件或Excel时，数字可能被误识别为文本类型。
+
+import pandas as pd
+
+df = pd.DataFrame({
+    'A': ['1', '2', '3'],
+    'B': ['4.5', '5.6', '6.7']
+})
+
+df['A'] = pd.to_numeric(df['A'])
+df['B'] = pd.to_numeric(df['B'])
+1
+2
+3
+4
+5
+6
+7
+8
+9
+2. 转换为日期类型
+使用 pd.to_datetime() 方法可以将字符串或整数转换为日期时间类型。这对于时间序列分析尤其重要。
+
+df = pd.DataFrame({
+    'date': ['2021-01-01', '2021-02-01', '2021-03-01']
+})
+
+df['date'] = pd.to_datetime(df['date'])
+1
+2
+3
+4
+5
+3. 转换为分类类型
+使用 astype('category') 可以将列转换为分类类型。这对于具有少量唯一值的字符串特征非常有用，可以提高内存效率和性能。
+
+df = pd.DataFrame({
+    'C': ['red', 'blue', 'green', 'red', 'blue']
+})
+
+df['C'] = df['C'].astype('category')
+1
+2
+3
+4
+5
+4. 转换为字符串类型
+有时候，为了输出格式化或处理文本数据，需要将数字或日期转换为字符串类型，可以使用 astype(str)。
+
+df['A'] = df['A'].astype(str)
+df['date'] = df['date'].astype(str)
+1
+2
+5. 转换布尔类型
+布尔类型转换用于创建基于某些条件的新列或过滤数据。
+
+df['is_high'] = df['B'] > 5.0
+df['is_high'] = df['is_high'].astype(bool)
+1
+2
+6. 处理转换错误
+在进行数据类型转换时，可能会遇到无法转换的值，例如，将包含非数字字符串的列转换为数字。to_numeric() 方法的 errors 参数可以用来处理这些情况：
+
+errors='raise': 默认行为，无法转换的值会引发错误。
+errors='coerce': 无法转换的值会被设置为 NaN。
+errors='ignore': 如果转换有误则返回原数据。
+df['B'] = pd.to_numeric(df['B'], errors='coerce')
+1
+3.数据排序
+在 Pandas 中，数据排序是数据预处理和分析的一个重要步骤。根据需要，你可以按照一个或多个列的值来对数据进行排序。Pandas 提供了 .sort_values() 和 .sort_index() 两个强大的方法来执行这些操作。
+
+1. 按列值排序
+使用 .sort_values() 方法，你可以根据一个或多个列的值对 DataFrame 进行排序。这是进行排序的最常用方法。
+
+import pandas as pd
+
+# 示例数据
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'David'],
+    'age': [25, 22, 35, 29],
+    'score': [88.5, 91.2, 84.5, 78.9]
+})
+
+# 根据 'age' 升序排序
+df_sorted = df.sort_values(by='age')
+
+# 根据 'score' 降序排序
+df_sorted_desc = df.sort_values(by='score', ascending=False)
+
+# 根据多列排序，先 'age' 升序，然后 'score' 降序
+df_sorted_multi = df.sort_values(by=['age', 'score'], ascending=[True, False])
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+2. 按索引排序
+使用 .sort_index() 方法，你可以根据 DataFrame 或 Series 的索引进行排序。这在索引被打乱后特别有用。
+
+# 假设索引被打乱
+df = df.sample(frac=1)  # 随机打乱数据
+
+# 按索引重新排序
+df_sorted_index = df.sort_index()
+1
+2
+3
+4
+5
+3. 稳定性排序
+Pandas 排序默认使用快速排序算法，这是一种不稳定的排序。如果需要稳定的排序（相同元素的相对顺序保持不变），可以指定 kind 参数。
+
+# 使用归并排序（稳定排序）
+df_sorted_stable = df.sort_values(by='age', kind='mergesort')
+1
+2
+4. 处理缺失值
+在排序时，缺失值默认会被放在排序结果的末尾。你可以通过 na_position 参数来控制缺失值的位置。
+
+# 示例数据中添加缺失值
+df.loc[2, 'score'] = pd.NA
+
+# 缺失值放在前面
+df_sorted_na_first = df.sort_values(by='score', na_position='first')
+1
+2
+3
+4
+5
+5. In-place 排序
+如果你想直接在原始 DataFrame 上修改排序结果，而不是创建一个新的 DataFrame，可以设置 inplace=True。
+
+# 原地排序
+df.sort_values(by='age', inplace=True)
+1
+2
+4.添加修改
+在 Pandas 中添加或修改数据是常见的数据处理操作，涉及到添加新列、修改现有列的值、插入新行，或者更新现有行的数据。下面我将详细介绍如何在 Pandas 中进行这些操作。
+
+1. 添加新列
+你可以直接使用列索引来添加新列。如果列不存在，Pandas 会创建一个新列。
+
+import pandas as pd
+
+# 示例数据
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie'],
+    'age': [25, 22, 35]
+})
+
+# 添加新列
+df['score'] = [88, 92, 85]  # 直接赋值
+df['city'] = 'Unknown'  # 给所有行赋相同的值
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+2. 修改列值
+可以基于条件或者直接索引修改列的值。
+
+# 修改特定行的数据
+df.loc[1, 'age'] = 23  # 修改第二行的 'age'
+
+# 基于条件修改
+df.loc[df['name'] == 'Alice', 'city'] = 'New York'
+1
+2
+3
+4
+5
+3. 插入新行
+使用 .append() 方法或 pd.concat() 可以插入新行。注意，.append() 方法在未来版本中将被弃用，推荐使用 pd.concat()。
+
+# 使用 append (未来版本中不推荐)
+new_row = {'name': 'David', 'age': 28, 'score': 90, 'city': 'Los Angeles'}
+df = df.append(new_row, ignore_index=True)
+
+# 使用 pd.concat (推荐方法)
+new_row_df = pd.DataFrame([new_row])
+df = pd.concat([df, new_row_df], ignore_index=True)
+1
+2
+3
+4
+5
+6
+7
+4. 更新现有行
+如果你需要更新整行的数据，可以使用 .loc[] 或 .iloc[]。
+
+# 假设我们知道要更新的行的索引
+df.loc[3] = ['Edward', 30, 91, 'Chicago']  # 更新第四行的所有数据
+1
+2
+5. 使用 apply() 修改
+如果需要根据现有数据计算新的数据值，可以使用 .apply() 方法。
+
+# 根据年龄计算分组
+df['group'] = df['age'].apply(lambda x: 'young' if x < 30 else 'adult')
+1
+2
+6. 用 at[] 和 iat[] 快速访问单个元素
+这两个方法用于快速访问和修改单个元素，at[] 使用标签索引，而 iat[] 使用整数索引。
+
+# 快速修改单个元素
+df.at[2, 'city'] = 'Boston'  # 使用标签索引
+df.iat[2, 3] = 'Boston'  # 使用整数索引
+1
+2
+3
+5.高级过滤
+在 Pandas 中进行高级过滤涉及到使用多种技巧和功能，以根据复杂的逻辑条件筛选数据。这些技术可以帮助你从大型数据集中提取具体的信息，特别是在数据分析和预处理阶段。下面是一些常用的高级过滤技术：
+
+1. 使用布尔索引进行复合条件过滤
+布尔索引是使用布尔值数组对 DataFrame 进行索引的方法。你可以组合多个条件，使用逻辑运算符 (&、|、~) 来构建复杂的查询。
+
+import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie', 'David'],
+    'age': [25, 22, 35, 29],
+    'score': [88, 92, 84, 75],
+    'city': ['New York', 'Los Angeles', 'New York', 'Chicago']
+})
+
+# 复合条件过滤：找出年龄大于24且分数低于90的人
+filtered_df = df[(df['age'] > 24) & (df['score'] < 90)]
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+2. 使用 query() 方法
+query() 方法允许你使用字符串形式的表达式来筛选数据，这使得代码更加简洁。
+
+# 使用 query 方法进行过滤
+filtered_df = df.query('age > 24 and score < 90')
+1
+2
+3. 利用 isin() 方法进行过滤
+当你需要根据列的值是否存在于某个预定义的列表中来过滤数据时，可以使用 isin() 方法。
+
+# 找出城市在特定列表中的记录
+cities = ['New York', 'Chicago']
+filtered_df = df[df['city'].isin(cities)]
+1
+2
+3
+4. 使用 filter() 方法
+filter() 方法用于按照指定的轴筛选标签。
+
+# 过滤出包含 'name' 和 'score' 的列
+filtered_cols = df.filter(items=['name', 'score'])
+1
+2
+5. 利用条件函数过滤
+使用 apply() 方法结合一个函数可以实现更复杂的过滤逻辑，特别是当过滤条件不能直接通过简单的表达式定义时。
+
+# 根据自定义函数过滤：选择名字长度大于4的记录
+filtered_df = df[df['name'].apply(lambda x: len(x) > 4)]
+1
+2
+6. 使用 mask() 和 where() 方法
+这两种方法提供了条件替换的功能，其中 where() 在条件为 False 时替换值，而 mask() 在条件为 True 时替换值。
+
+# 使用 where，不满足条件的替换为 NaN
+filtered_df = df['score'].where(df['score'] > 85)
+
+# 使用 mask，满足条件的替换为 NaN
+masked_df = df['score'].mask(df['score'] > 85)
+1
+2
+3
+4
+5
+7. 利用 .loc[] 进行条件选择和赋值
+可以用 .loc[] 结合条件来进行复杂的过滤和赋值操作。
+
+# 将符合条件的 'score' 增加 5 分
+df.loc[df['age'] > 24, 'score'] += 5
+1
+2
+6.数据迭代
+在 Pandas 中进行数据迭代通常涉及遍历 DataFrame 或 Series 中的行、列或元素。尽管 Pandas 提供了多种高效的向量化方法来处理数据，有时候直接迭代数据集仍然是必要的，尤其是在处理复杂的行或列操作时。以下是一些常用的迭代方法：
+
+1. 使用 iterrows() 遍历行
+iterrows() 是一个生成器，它为每行返回行索引和行数据的序列。这个方法主要用于行迭代，尽管它相对较慢，因为每次迭代都会返回一个 Pandas Series 对象。
+
+import pandas as pd
+
+df = pd.DataFrame({
+    'name': ['Alice', 'Bob', 'Charlie'],
+    'age': [25, 22, 35],
+    'score': [88.5, 91.2, 84.5]
+})
+
+for index, row in df.iterrows():
+    print(f"Index: {index}, Name: {row['name']}, Age: {row['age']}, Score: {row['score']}")
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+2. 使用 itertuples() 遍历行
+itertuples() 返回一个命名元组，每个元组代表 DataFrame 的一行。这个方法比 iterrows() 快得多，是进行行迭代的首选方法。
+
+for row in df.itertuples():
+    print(f"Name: {row.name}, Age: {row.age}, Score: {row.score}")
+1
+2
+3. 使用 iteritems() 遍历列
+iteritems() 适用于遍历 DataFrame 的列，返回列名和列数据的序列。这在需要对列数据进行操作时特别有用。
+
+for label, content in df.iteritems():
+    print(f"Column: {label}")
+    print(content)
+1
+2
+3
+4. 直接遍历 Series
+如果只需要遍历 Series 中的元素，可以直接使用 Python 的标准迭代方法。
+
+for value in df['name']:
+    print(value)
+1
+2
+注意事项
+虽然这些迭代方法在某些情况下很有用，但它们通常不是处理大数据集的最有效方法。Pandas 的优势在于其向量化操作，可以一次处理整个数组，无需显式循环。因此，尽可能使用 Pandas 的内置函数，如 apply(), map(), groupby() 等，来进行数据操作。
+
+避免在迭代中修改数据
+在迭代 DataFrame 或 Series 时直接修改数据需要小心处理。在迭代过程中修改正在迭代的对象可能导致不可预测的结果或错误。如果需要修改数据，建议先收集需要的更改，然后在迭代完成后再统一应用这些更改。
+
+7.函数应用
+1. pipe()
+pipe() 方法允许你将整个 DataFrame 或 Series 传递到一个函数中。这对于创建可重用的数据处理管道尤为有效，可以将多个处理步骤链式调用。
+
+示例：标准化 DataFrame 的某些数值列
+import pandas as pd
+
+df = pd.DataFrame({
+    'A': range(1, 6),
+    'B': range(10, 0, -2)
+})
+
+def standardize(df):
+    return (df - df.mean()) / df.std()
+
+def multiply(df, factor):
+    return df * factor
+
+result = df.pipe(standardize).pipe(multiply, factor=2)
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+2. apply()
+apply() 方法用于在 DataFrame 的轴（行或列）上应用函数，也可以用于 Series 对象。在 DataFrame 上，它常用于执行需要访问多列数据的操作。
+
+示例：计算每行的最大值和最小值之差
+df = pd.DataFrame({
+    'A': [1, 2, 3],
+    'B': [4, 5, 6],
+    'C': [7, 8, 9]
+})
+
+df['max-min'] = df.apply(lambda x: x.max() - x.min(), axis=1)
+1
+2
+3
+4
+5
+6
+7
+3. applymap()
+applymap() 仅用于 DataFrame，它对 DataFrame 中的每个元素应用一个函数。这是一个逐元素操作，类似于 Excel 中的数组公式。
+
+示例：将所有元素转换为浮点数
+df = df.applymap(float)
+1
+4. map()
+map() 方法适用于 Series，用于将 Series 的每个值映射到另一个值。这非常适合进行元素级转换。
+
+示例：将一列的值替换为新值
+s = pd.Series(['cat', 'dog', 'bird', 'fish', 'hamster'])
+
+# 直接映射
+s_mapped = s.map({'cat': 'kitten', 'dog': 'puppy'})
+1
+2
+3
+4
+在 Pandas 中，agg(), transform(), 和 copy() 是三种非常实用的方法，它们分别用于数据的聚合、转换和复制。这些功能在数据预处理和分析中非常重要，可以帮助进行高效的数据操作和保持数据的完整性。下面，我将详细解释每个方法的用途和示例。
+
+5. agg()
+agg() 方法（也称为 aggregate()）允许你对数据进行聚合操作，可以一次性应用多个聚合函数，非常适合于同时计算多个统计指标。它可以用于 Series 和 DataFrame。
+
+示例：在 DataFrame 上使用 agg() 来同时计算多个统计量
+import pandas as pd
+
+df = pd.DataFrame({
+    'A': [1, 2, 3],
+    'B': [4, 5, 6]
+})
+
+# 同时计算每列的最小值、最大值和平均值
+result = df.agg(['min', 'max', 'mean'])
+1
+2
+3
+4
+5
+6
+7
+8
+9
+6. transform()
+transform() 方法用于对数据集中的数据应用一个函数，其特点是返回与输入数据相同长度的结果。这使得它在进行如分组操作后的数据标准化或其他行转换时非常有用。
+
+示例：使用 transform() 在分组后应用标准化
+df = pd.DataFrame({
+    'key': ['A', 'B', 'A', 'B'],
+    'value': [10, 20, 30, 40]
+})
+
+# 对 'value' 列进行分组标准化
+df['normalized'] = df.groupby('key')['value'].transform(lambda x: (x - x.mean()) / x.std())
+1
+2
+3
+4
+5
+6
+7
+7. copy()
+copy() 方法用于创建 DataFrame 或 Series 的副本。在处理数据时，如果需要修改数据而不想影响原始数据，使用 copy() 是非常重要的。这可以防止在原始数据上意外进行更改，这种情况在 Pandas 中称为“视图”与“复制”的问题。
+
+示例：创建 DataFrame 的副本并修改
+df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+df_copy = df.copy()
+
+# 修改副本
+df_copy['A'] = [10, 20, 30]
+1
+2
+3
+4
+5
+总结和性能建议
+pipe()：非常适合于创建复杂的数据处理链。它使得函数调用可以更加清晰和有组织。
+apply()：灵活强大，适用于更复杂的行或列级操作，但通常比向量化方法慢。
+applymap()：对整个 DataFrame 进行元素级操作，当需要对 DataFrame 中的每个单元格执行相同操作时使用。
+map()：非常适用于单个 Series 的简单元素替换，特别是有一个清晰的映射关系时。
+agg()：非常适合同时进行多种统计聚合，可以在一个步骤中计算多个统计指标。
+transform()：当你需要对分组数据进行转换操作时，它能确保转换结果的结构与原始数据相匹配。
+copy()：在需要修改数据的同时保留原始数据不变时，使用 copy() 确保你不会意外修改到原始数据。
