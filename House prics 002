@@ -1,0 +1,157 @@
+# House Prices
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.feature_selection import RFE
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
+from sklearn.feature_selection import mutual_info_classif
+
+
+train_file = './data/house-prices-advanced-regression-techniques/train.csv'
+test_file = './data/house-prices-advanced-regression-techniques/test.csv'
+
+data = pd.read_csv(train_file)
+
+print('\n data info:\n', data.info())
+print('\n data describe:\n', data.describe())
+
+col_types = list(set(data.dtypes.tolist()))
+print("\n data types:\n", col_types)
+
+num_data = data.select_dtypes(include=['int64', 'float64'])
+print('\n num datas:\n', num_data.head(20))
+
+cat_data = data.select_dtypes(include=['O'])
+print('\n cat datas:\n', cat_data.head(20))
+
+# num_data.hist(figsize=(16, 20), bins=50, xlabelsize=8, ylabelsize=8)
+# plt.show()
+
+
+# # Detect outliers using the IQR method
+# def detect_outliers_iqr(df):
+#     outliers_dict = {}
+#     for col in df.columns:
+#         Q1 = df[col].quantile(0.25)
+#         Q3 = df[col].quantile(0.75)
+#         IQR = Q3 - Q1
+#         lower_bound = Q1 - 1.5 * IQR
+#         upper_bound = Q3 + 1.5 * IQR
+        
+#         # Identify outliers
+#         outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)][col]
+#         # outliers1 = df[col][(df[col] < lower_bound) | (df[col] > upper_bound)]
+#         print('\n outliers: \n', outliers)
+#         # print('\n outliers1####: \n', outliers1)
+
+#         if not outliers.empty:
+#             outliers_dict[col] = outliers
+            
+#     return outliers_dict
+
+# # Get outliers for each column
+# outliers_iqr = detect_outliers_iqr(num_data)
+
+# # Print outliers for each column
+# for col, outliers in outliers_iqr.items():
+#     print(f"Outliers in column {col}:")
+
+
+# outliers_iqr =  list(outliers_iqr.keys())
+# #outliers_iqr = outliers_iqr[: len(outliers_iqr)]
+
+# data fill
+medians = data.select_dtypes(include='number').median()
+data.fillna(value=medians, inplace=True)
+
+modes = data.select_dtypes(include='object').mode().iloc[0]
+data.fillna(value=modes, inplace=True)
+
+# remove too much nan
+# data.drop
+
+# remove unimportant columns
+
+# correlation_matrix = data.select_dtypes(include='number').corr()
+# print(correlation_matrix)
+# top_features = correlation_matrix['SalePrice'].abs().nlargest(5).index
+# for feature in top_features:
+#     plt.figure(figsize=(8, 5))
+#     sns.scatterplot(data=data, x=feature, y='SalePrice')
+#     plt.title(f'SalePrice vs {feature}')
+#     plt.xlabel(feature)
+#     plt.ylabel('SalePrice')
+#     plt.show()
+
+# plt.figure(figsize=(8, 5))
+# sns.histplot(data['SalePrice'], bins=30, kde=True)
+# plt.title('Distribution of SalePrice')
+# plt.xlabel('SalePrice')
+# plt.ylabel('Frequency')
+# plt.show()
+
+# data['SalePrice'] = np.log1p(data['SalePrice'])
+
+# plt.figure(figsize=(8, 5))
+# sns.histplot(data['SalePrice'], bins=30, kde=True)
+# plt.title('Distribution of SalePrice')
+# plt.xlabel('SalePrice')
+# plt.ylabel('Frequency')
+# plt.show()
+
+# from sklearn.model_selection import train_test_split
+# from sklearn.preprocessing import StandardScaler, OneHotEncoder
+# from sklearn.compose import ColumnTransformer
+# from sklearn.pipeline import Pipeline
+# from sklearn.linear_model import LinearRegression
+# from sklearn.metrics import mean_squared_error
+# from sklearn.ensemble import RandomForestRegressor
+# from sklearn.model_selection import RandomizedSearchCV
+# from xgboost import XGBRegressor
+# from sklearn.linear_model import Lasso
+
+
+fig, ax=plt.subplots(1,3,figsize=(28,7))
+sns.scatterplot(x=data.GrLivArea,y=data.SalePrice,size=data.BedroomAbvGr,hue=data.OverallQual, ax=ax[0])
+ax[0].set_title("Ground Living Area")
+sns.scatterplot(x=data.LotArea,y=data.SalePrice,size=data.BedroomAbvGr,hue=data.OverallQual, ax=ax[1])
+ax[1].set_title("LOT AREA")
+sns.boxplot(x=data.SalePrice)
+
+plt.show()
+
+# drop data outliers
+rows_2_drop=data[data['SalePrice']>data['SalePrice'].quantile(0.995)].index
+data.drop(rows_2_drop,inplace=True)
+
+X_train = df_train.drop(['Id','SalePrice'],axis=1)
+y_train = df_train.SalePrice
+X_test = df_test.drop(['Id'],axis=1)
+
+# Select categorical columns with relatively low cardinality (convenient but arbitrary)
+categorical_cols = [cname for cname in X_train.columns if X_train[cname].dtype == "object"]
+
+# Select numerical columns
+numerical_cols = [cname for cname in X_train.columns if X_train[cname].dtype in ['int64', 'float64']]
+
+# Preprocessing for numerical data
+numerical_transformer = SimpleImputer(strategy='constant')
+
+# Preprocessing for categorical data
+categorical_transformer = Pipeline(steps=[('imputer', SimpleImputer(strategy='most_frequent')),('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+# Bundle preprocessing for numerical and categorical data
+preprocessor = ColumnTransformer(transformers=[('num', numerical_transformer, numerical_cols), ('cat', categorical_transformer, categorical_cols)])
+
+from sklearn.ensemble import RandomForestClassifier
+model_GBR =  GradientBoostingRegressor(n_estimators=1100, loss='squared_error', subsample = 0.35, learning_rate = 0.05,random_state=1)
+GBR_Pipeline = Pipeline(steps=[('preprocessor', preprocessor),('model', model_GBR)])
+GBR_Pipeline.fit(X_train, y_train)
+preds_GBR = GBR_Pipeline.predict(X_test)
