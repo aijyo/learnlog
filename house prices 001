@@ -1,0 +1,119 @@
+# House Prices - Advanced Regression Techniques
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from scipy import stats
+from scipy.stats import norm, skew
+
+color = sns.color_palette()
+sns.set_style('darkgrid')
+
+
+train_file = './data/house-prices-advanced-regression-techniques/train.csv'
+test_file = './data/house-prices-advanced-regression-techniques/test.csv'
+
+data = pd.read_csv(train_file)
+
+# corrmat = data.corr()
+# f, ax = plt.subplots(figsize=(12, 9))
+
+# sns.heatmap(corrmat, vmax=.8, square=True)
+# plt.show()
+
+# k = 10
+# cols = corrmat.nlargest(k, 'SalePrice')['SalePrice'].index
+
+# cm = np.corrcoef(data[cols].values.T)
+
+# sns.set(font_scale=1.25)
+
+# hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f', annot_kws={'size':10}, yticklabels=cols.values, xticklabels=cols.values)
+
+# plt.show()
+
+# fig, ax = plt.subplots()
+
+# ax.scatter(x=data.TotalBsmtSF, y=data.SalePrice)
+# plt.xlabel('TotalBsmtSF')
+# plt.ylabel('SalePrice')
+
+# plt.show()
+
+# fig, ax =plt.subplots()
+# ax.scatter(x=data.GrLivArea, y=data.SalePrice) 
+# plt.xlabel('GrLivArea')
+# plt.ylabel('SalePrice')
+# plt.show()
+
+# fig, ax=plt.subplot()
+# ax.scatter(x=data.GarageArea, y=data.SalePrice)
+# plt.xlabel('GarageArea')
+# plt.ylabel('SalePrice')
+# plt.show()
+
+# var = 'OverallQual'
+# data_tmp = pd.concat([data['SalePrice'], data[var]], axis=1)
+# fig, ax= plt.subplots(figsize=(8,6))
+
+# fig = sns.boxplot(x=var, y='SalePrice', data=data_tmp)
+# fig.axis(ymin=0, ymax=800000)
+# plt.show()
+
+# sns.histplot(data['SalePrice'], kde=True)
+
+# mu, std = stats.norm.fit(data['SalePrice'])
+
+# fit = np.linspace(np.min(data['SalePrice']), np.max(data['SalePrice']), 100)
+# fitted_dist = stats.norm.pdf(fit, mu, std)
+
+# plt.plot(fit, fitted_dist, color='red', linewidth=2)
+
+# plt.show()
+
+# fig = plt.figure()
+# res = stats.probplot(data['SalePrice'], plot=plt)
+
+# sns.histplot(data['SalePrice'], kde=True)
+ 
+# (mu, sigma) = stats.norm.fit(data['SalePrice'])
+# print( '\n mu = {:.2f} and sigma = {:.2f}\n'.format(mu, sigma))
+ 
+# plt.legend(['Normal dist. ($\mu=$ {:.2f} and $\sigma=$ {:.2f} )'.format(mu, sigma)],
+#             loc='best')
+# plt.ylabel('Frequency')
+# plt.title('SalePrice distribution')
+ 
+# fig = plt.figure()
+# res = stats.probplot(data['SalePrice'], plot=plt)
+# plt.show()
+
+nan_datas = data.isnull().sum().sort_values(ascending=False)
+nan_datas_per = (nan_datas/len(data)) * 100
+
+print('nan data:',nan_datas.head(20))
+print('nan data percent:',nan_datas_per.head(20))
+
+nan_datas_k_20 = nan_datas.head(20)
+fig, ax = plt.subplots(figsize=(10, 8))
+plt.xticks(rotation='90')
+sns.barplot(x=nan_datas_k_20.index, y=nan_datas_k_20)
+
+plt.xlabel('Features', fontsize=15)
+plt.ylabel('Percent of missing values', fontsize=15)
+plt.title('Percent missing data by feature', fontsize=15)
+plt.show()
+
+# fill nan as none ==> nan replace with 'none'
+data['FireplaceQu'] = data['FireplaceQu'].fillna('none')
+
+data['LotFrontage'] = data.groupby('Neighborhood')['LotFrontage'].transform(lambda x: x.fillna(x.median()))
+
+for col in ['GarageType', 'GarageFinish', 'GarageQual', 'GarageCond']:
+    data[col]=data[col].fillna('none')
+
+
+data['MSZoning'] = data['MSZoning'].fillna(data['MSZoning'].mode()[0])
+
