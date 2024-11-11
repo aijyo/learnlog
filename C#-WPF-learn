@@ -29,4 +29,4 @@ WindowsFormsHost 作为子窗口，获取hwnd传递给C++的时候，需要在Ma
 
 这样才会让_screenWindow在 MainWindow上显示出来，获取hwnd的方法如下：
 
-                    var hwnd = _screenWindow.Handle;
+                    var hwnd = _screenWindow.Child.Handle;
