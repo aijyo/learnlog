@@ -18,3 +18,15 @@
         }
 
     }
+
+
+WindowsFormsHost 作为子窗口，获取hwnd传递给C++的时候，需要在MainWindow 初始化的时候给每一个WindowsFormsHost窗口添加一个控件，才不会导致 actualWidth 或者actualHeight为0
+
+比如在 public MainWindow() 中添加下面的代码： 
+            System.Windows.Forms.Panel screenPanel = new System.Windows.Forms.Panel();
+            screenPanel.BackColor = System.Drawing.Color.LightPink;
+            _screenWindow.Child = screenPanel;
+
+这样才会让_screenWindow在 MainWindow上显示出来，获取hwnd的方法如下：
+
+                    var hwnd = _screenWindow.Handle;
