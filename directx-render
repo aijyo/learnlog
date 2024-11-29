@@ -1,0 +1,59 @@
+world  view  projection 矩阵设置
+  
+		Matrix::MatrixToIdentity(world_);
+		Matrix::MatrixToIdentity(view_);
+		Matrix::MatrixToIdentity(projection_);
+		auto& cfg = config_;
+
+		// rotate world
+		// XMMatrixRotationZ rotate clockwise, but frame rotation is anticlockwise.
+		float nRadionToRender = (DirectX::XM_PI * -(int)config_.get_rotation()) / 180.0f;
+		DirectX::XMStoreFloat4x4(
+			&world_, DirectX::XMMatrixTranspose(DirectX::XMMatrixRotationZ(nRadionToRender)));
+
+		// NDC size is equal to view ,if view is null, equal target size
+		auto width = cfg.get_view_width();
+		auto height = cfg.get_view_height();
+
+		DirectX::XMStoreFloat4x4(&projection_,
+			DirectX::XMMatrixTranspose(DirectX::XMMatrixOrthographicLH(
+				(float)width, (float)height, 0.1f, 1000.0f)));
+
+		DirectX::XMVECTOR sVecEye = DirectX::XMVectorSet(0.0f, 0.0f, -10.0f, 0.0f);
+		DirectX::XMVECTOR sVecAt = DirectX::XMVectorSet(0.0f, 0.0f, -9.0f, 0.0f);
+		DirectX::XMVECTOR sVecUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+		DirectX::XMStoreFloat4x4(&view_, DirectX::XMMatrixTranspose(DirectX::XMMatrixLookAtLH(
+			sVecEye, sVecAt, sVecUp)));
+vertex shader
+float4 main(VertexImageOut input) : SV_TARGET
+{
+	float outColor = 0.0;
+	float2 cur_pos = input.Tex;
+	float2 texCoord0 = float2(cur_pos.x, cur_pos.y);
+
+	float4 color0 = g_txFrame0.Sample(g_Sam, texCoord0).rgba;
+
+	float4 COEF_Y = g_ColorCoef[0];
+	float4 COEF_OFFSET = g_ColorCoef[3];
+	float y0 = dot(color0.rgb, COEF_Y.rgb) + COEF_OFFSET.r;
+
+	outColor = y0;
+	return float4(outColor, 0.0, 0.0f, 0.0f);
+}
+
+pixel shader
+  VertexImageOut main(VertexImageIn input)
+{
+    VertexImageOut output;
+
+    float4 pos = float4(input.Pos, 1.0f);
+
+    pos = mul(pos, g_World);
+    pos = mul(pos, g_View);
+    pos = mul(pos, g_Proj);
+
+    output.Pos = pos;
+    output.Tex = input.Tex;
+
+    return output;
+}
