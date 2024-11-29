@@ -1,0 +1,570 @@
+如果没有装 DX9 IsThreadDesktopComposited 返回false 直接copy对应屏幕区域
+zoom 他们就是hook了CBaseDevice::StretchRect
+//excludewindow.cpp
+#include "MagnifierCapture.h"
+#include <iostream>
+
+
+namespace x_monitor
+{
+	typedef struct
+	{
+		const WCHAR* displayDeviceName;
+		HMONITOR          monitorHandle;
+	}MonitorQueryItem;
+
+	BOOL CALLBACK EnumProcFunc(HMONITOR hMonitor, HDC hdcMonitor,
+		LPRECT lprcMonitor, LPARAM dwData)
+	{
+		MonitorQueryItem& wantedMonitor = *(reinterpret_cast<MonitorQueryItem*>(dwData));
+		MONITORINFOEX info;
+		info.cbSize = sizeof(MONITORINFOEX);
+		GetMonitorInfo(hMonitor, &info);
+		if (info.dwFlags == DISPLAY_DEVICE_MIRRORING_DRIVER)
+		{
+			return true;
+		}
+		DEVMODEW devMode;
+		ZeroMemory(&devMode, sizeof(devMode));
+		devMode.dmSize = sizeof(devMode);
+		devMode.dmDriverExtra = 0;
+		if (!EnumDisplaySettingsEx(info.szDevice, ENUM_CURRENT_SETTINGS, &devMode, 0))
+		{
+			return true;
+		}
+		HDC hdc = CreateDC(info.szDevice, NULL, NULL, NULL);
+		if (!hdc)
+		{
+			return true;
+		}
+		DeleteDC(hdc);
+		if (wcscmp(wantedMonitor.displayDeviceName, info.szDevice) == 0)
+		{
+			//find wanted monitor.
+			wantedMonitor.monitorHandle = hMonitor;
+			return false;
+		}
+
+		return true;
+	}
+
+	HMONITOR GetMonitorHandleByName(const WCHAR* deviceName)
+	{
+		if (!deviceName)
+		{
+			return NULL;
+		}
+		MonitorQueryItem query = { deviceName, NULL };
+		EnumDisplayMonitors(NULL, NULL, EnumProcFunc,
+			reinterpret_cast<LPARAM>(&query));
+
+		return query.monitorHandle;
+	}
+
+	RECT GetMonitorPos(const std::wstring& name)
+	{
+		HMONITOR monitor = GetMonitorHandleByName(name.c_str());
+		MONITORINFO mi;
+		mi.cbSize = sizeof(mi);
+		GetMonitorInfo(monitor, &mi);
+
+		return mi.rcMonitor;
+	}
+}
+
+
+DWORD GetTlsIndex() {
+	static const DWORD tls_index = TlsAlloc();
+	//RTC_DCHECK();
+	if (tls_index == TLS_OUT_OF_INDEXES)
+	{
+		// error
+		int test = 0;
+		test = 1;
+	}
+	return tls_index;
+}
+
+MagnifierCapture::MagnifierCapture()
+	: magnifier_initialized_(false)
+	, m_hostWndClass(0)
+	, m_hInstance(NULL)
+{
+	RECT rc = { 0 };
+	m_rcMonitor = rc;
+}
+
+
+MagnifierCapture::~MagnifierCapture()
+{
+	if (magnifier_initialized_)
+	{
+		magnifier_initialized_ = false;
+		Uninit();
+	}
+	if (m_hostWndClass)
+	{
+		UnregisterClassW(kMagnifierHostClass, m_hInstance);
+		m_hostWndClass = 0;
+	}
+}
+
+//
+// FUNCTION: HostWndProc()
+//
+// PURPOSE: Window procedure for the window that hosts the magnifier control.
+//
+LRESULT CALLBACK HostWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	auto pThis = (MagnifierCapture*)GetWindowLongPtr(hWnd, GWL_USERDATA);
+	switch (message)
+	{
+	case WM_DISPLAYCHANGE:
+		if (pThis)
+		{
+			DWORD dwHigh = LOWORD(lParam);
+			DWORD dwWidth = HIWORD(lParam);
+			pThis->OnDisplayChange(dwWidth, dwHigh);
+		}
+		break;
+	case WM_DESTROY:
+		//PostQuitMessage(0);
+		break;
+
+	case WM_SIZE:
+
+		if (pThis)
+		{
+			//pThis->OnHostResize();
+		}
+		break;
+	default:
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+	return 0;
+}
+
+int MagnifierCapture::InitWindow()
+{
+	int result = 0;
+	do 
+	{
+		HMODULE hInstance = nullptr;
+		auto rt =
+			GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+				GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				reinterpret_cast<char*>(&DefWindowProc), &hInstance);
+		++result;		// step 4
+		if (!rt) {
+			break;
+		}
+
+		if (m_hostWndClass == 0)
+		{
+			// Register the host window class. See the MSDN documentation of the
+			// Magnification API for more information.
+			WNDCLASSEXW wcex = {};
+			wcex.cbSize = sizeof(WNDCLASSEX);
+			wcex.lpfnWndProc = &HostWndProc;
+			wcex.hInstance = hInstance;
+			wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
+			wcex.lpszClassName = kMagnifierHostClass;
+
+			// Ignore the error which may happen when the class is already registered.
+			m_hostWndClass = RegisterClassExW(&wcex);
+		}
+		
+		RECT rc = { 0 };
+		if (m_targetName.length() > 0)
+		{
+			rc = x_monitor::GetMonitorPos(m_targetName);
+			m_rcMonitor = rc;
+		}
+		
+		int nX = rc.left;
+		int nY = rc.top;
+		int nScreenW = rc.right - rc.left;
+		int nScreenH = rc.bottom - rc.top;
+		// Create the host window.
+		host_window_ =
+			CreateWindowExW(WS_EX_LAYERED, kMagnifierHostClass, kHostWindowName, 0, 0,
+				rc.right-rc.left, rc.bottom - rc.top, 0, nullptr, nullptr, hInstance, nullptr);
+		++result;			// step 5
+		if (!host_window_) 
+		{
+			break;
+		}
+		SetWindowLongPtr(host_window_, GWL_USERDATA, (LONG_PTR)this);
+
+		rt = SetWindowPos(host_window_, NULL, 0, 0,
+			nScreenW, nScreenH, /*SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE*/0);
+
+		//GetClientRect(host_window_, &rc);
+		// Create the magnifier control.
+		magnifier_window_ = CreateWindowW(kMagnifierWindowClass, kMagnifierWindowName,
+			WS_CHILD | WS_VISIBLE, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
+			host_window_, nullptr, hInstance, nullptr);
+		++result;			// step 6
+		if (!magnifier_window_) 
+		{
+			break;
+		}
+
+		rt = SetWindowPos(magnifier_window_, NULL, 0, 0,
+			nScreenW, nScreenH, /*SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE*/0);
+
+		// Hide the host window.
+		ShowWindow(host_window_, SW_HIDE);	
+		result = 0;
+	} while (false);
+	return result;
+}
+
+int MagnifierCapture::UninitWindow()
+{
+	// DestroyWindow must be called before MagUninitialize. magnifier_window_ is
+	// destroyed automatically when host_window_ is destroyed.
+	if (host_window_)
+	{
+		DestroyWindow(host_window_);
+		host_window_ = NULL;
+	}
+		
+	return 0;
+}
+
+bool MagnifierCapture::Init(const std::wstring& targetName /* = std::wstring() */)
+{
+    int result = 0;
+	SetTargetName(targetName);
+
+    do 
+	{
+		if (magnifier_initialized_) break;
+
+		mag_lib_handle_ = LoadLibraryW(L"Magnification.dll");
+
+		++result;			// step 1
+		if (!mag_lib_handle_) break;
+
+		// Initialize Magnification API function pointers.
+		mag_initialize_func_ = reinterpret_cast<MagInitializeFunc>(
+			GetProcAddress(mag_lib_handle_, "MagInitialize"));
+		mag_uninitialize_func_ = reinterpret_cast<MagUninitializeFunc>(
+			GetProcAddress(mag_lib_handle_, "MagUninitialize"));
+		set_window_source_func_ = reinterpret_cast<MagSetWindowSourceFunc>(
+			GetProcAddress(mag_lib_handle_, "MagSetWindowSource"));
+		set_window_filter_list_func_ = reinterpret_cast<MagSetWindowFilterListFunc>(
+			GetProcAddress(mag_lib_handle_, "MagSetWindowFilterList"));
+		set_image_scaling_callback_func_ =
+			reinterpret_cast<MagSetImageScalingCallbackFunc>(
+				GetProcAddress(mag_lib_handle_, "MagSetImageScalingCallback"));
+		set_fullscreen_transform_ =
+			reinterpret_cast<MagSetFullscreenTransform>(
+				GetProcAddress(mag_lib_handle_, "MagSetFullscreenTransform"));
+		++result;		// step 2
+		if (!mag_initialize_func_ || !mag_uninitialize_func_ ||
+			!set_window_source_func_ || !set_window_filter_list_func_ ||
+			!set_image_scaling_callback_func_
+			|| !set_fullscreen_transform_) {
+			//std::cout << "Failed to initialize ScreenCapturerWinMagnifier: "
+			//	<< "library functions missing.";
+			break;
+		}
+
+		BOOL rt = mag_initialize_func_();
+		++result;			// step 3
+		if (!rt) {
+			//std::cout << "Failed to initialize ScreenCapturerWinMagnifier: "
+			//	<< "error from MagInitialize " << GetLastError();
+			break;
+		}
+
+		int nTmp = InitWindow();
+		result = nTmp == 0? 0 : result + nTmp;
+
+		// Set the scaling callback to receive captured image.
+		rt = set_image_scaling_callback_func_(
+			magnifier_window_,
+			&MagnifierCapture::OnMagImageScalingCallback);
+		++result;			// step 7
+		if (!rt) {
+			break;
+		}
+		result = 0;			// suc
+
+		magnifier_initialized_ = true;
+
+		ExcludeWindow_(m_vcExcludeIds);
+    } while (false);
+
+	if (result > 3)
+	{
+		mag_uninitialize_func_();
+	}
+    return result;
+}
+
+bool MagnifierCapture::Uninit()
+{
+	UninitWindow();
+	mag_uninitialize_func_();
+
+	if (mag_lib_handle_)
+		FreeLibrary(mag_lib_handle_);
+
+	magnifier_initialized_ = false;
+	return 0;
+}
+
+
+BOOL MagnifierCapture::OnMagImageScalingCallback(
+    HWND hwnd,
+    void* srcdata,
+    MAGIMAGEHEADER srcheader,
+    void* destdata,
+    MAGIMAGEHEADER destheader,
+    RECT unclipped,
+    RECT clipped,
+    HRGN dirty) {
+	auto item = TlsGetValue(GetTlsIndex());
+    MagnifierCapture* owner =
+        reinterpret_cast<MagnifierCapture*>(item);
+    //TlsSetValue(GetTlsIndex(), nullptr);
+    owner->OnCaptured(srcdata, srcheader);
+
+    return TRUE;
+}
+
+void MagnifierCapture::OnCaptured(void* data, const MAGIMAGEHEADER& header) {
+
+    // Verify the format.
+    // TODO(jiayl): support capturing sources with pixel formats other than RGBA.
+    int captured_bytes_per_pixel = header.cbSize / header.width / header.height;
+    if (header.format != GUID_WICPixelFormat32bppRGBA) {
+        //std::cout
+        //    << "Output format does not match the captured format: "
+        //    << "width = " << header.width << ", "
+        //    << "height = " << header.height << ", "
+        //    << "stride = " << header.stride << ", "
+        //    << "bpp = " << captured_bytes_per_pixel << ", "
+        //    << "pixel format RGBA ? "
+        //    << (header.format == GUID_WICPixelFormat32bppRGBA) << ".";
+        return;
+    }
+
+    //static FILE* fp = fopen(".\\rgba.rgba", "wb");
+    //if (fp)
+    //{
+    //    //fwrite(data, header.width * header.height * 4, 1, fp);
+    //    fwrite(data, header.cbSize, 1, fp);
+    //    fflush(fp);
+    //    fclose(fp);
+    //    fp = NULL;
+    //}
+
+    // Copy the data into the frame.
+  /*  current_frame->CopyPixelsFrom(
+		reinterpret_cast<uint8_t*>(data), header.stride,
+		DesktopRect::MakeXYWH(0, 0, header.width, header.height));*/
+	long length = header.width * header.height * BPP_BGRA;//GUID_WICPixelFormat32bppRGBA
+	if(header.stride != header.width * BPP_BGRA)
+	{
+		m_curFrame.WriteDataRowByRow(static_cast<unsigned char*>(data),
+			header.stride, header.width * BPP_BGRA,
+			header.height, length);
+	}
+	else
+	{
+		m_curFrame.WriteData(reinterpret_cast<uint8_t*>(data), length);
+	}
+
+	m_curFrame.SetWidth(header.width);
+	m_curFrame.SetHeight(header.height);
+    magnifier_capture_succeeded_ = true;
+}
+
+int MagnifierCapture::ExcludeWindow(HWND hWnd)
+{
+    std::vector<HWND> vcWnd(1);
+    vcWnd[0] = hWnd;
+    int result = ExcludeWindow(vcWnd);
+    return result;
+}
+
+int MagnifierCapture::ExcludeWindow(const std::vector<HWND>& vcWnd)
+{
+	int result = 0;
+
+	m_vcExcludeIds = vcWnd;
+	if (magnifier_initialized_)
+	{
+		ExcludeWindow_(m_vcExcludeIds);
+	}
+    return result;
+}
+
+int MagnifierCapture::ExcludeWindow_(const std::vector<HWND>& vcWnd)
+{
+	int result = 0;
+	do
+	{
+		if (vcWnd.empty())
+		{
+			set_window_filter_list_func_(
+				magnifier_window_, MW_FILTERMODE_EXCLUDE, 0, NULL);
+			break;
+		}
+
+		++result;
+		if (!magnifier_initialized_) break;
+
+
+		BOOL rt = set_window_filter_list_func_(
+			magnifier_window_, MW_FILTERMODE_EXCLUDE, vcWnd.size(), (HWND*)(&vcWnd[0]));
+
+		++result;
+		if (!rt) {
+			//mag_uninitialize_func_();
+			//std::cout
+			//	<< "Failed to initialize ScreenCapturerWinMagnifier: "
+			//	<< "error from MagSetWindowFilterList " << GetLastError();
+			//return -1;
+			break;
+		}
+
+		result = 0;				//suc
+
+	} while (false);
+	return result;
+}
+
+int MagnifierCapture::SetTransform(float magnificationFactor, int offsetX, int offsetY)
+{
+	int result = -1;
+
+	do 
+	{
+		if (magnificationFactor < 1.0) break;
+
+		BOOL fSuccess = set_fullscreen_transform_(magnificationFactor, offsetX, offsetY);
+
+		result = fSuccess ? 0 : 1;
+
+	} while (false);
+
+	return result;
+}
+
+int MagnifierCapture::CaptureFrame(const RECT& rcTarget, FrameType& frame)
+{
+	int result = -1;
+
+		do
+		{
+			if (!magnifier_initialized_) break;				// invalid
+
+			auto& native_rect = m_rcMonitor;
+			int nX = /*GetSystemMetrics(SM_XVIRTUALSCREEN)*/native_rect.left;
+			int nY = /*GetSystemMetrics(SM_YVIRTUALSCREEN)*/native_rect.top;
+			int nScreenW = /*GetSystemMetrics(SM_CXVIRTUALSCREEN)*/native_rect.right - native_rect.left;
+			int nScreenH = /*GetSystemMetrics(SM_CYVIRTUALSCREEN)*/native_rect.bottom - native_rect.top;
+
+			++result;			// step 1
+			RECT rcCur = x_monitor::GetMonitorPos(m_targetName);
+			if (rcCur.left != m_rcMonitor.left
+				|| rcCur.top != m_rcMonitor.top
+				|| rcCur.right != m_rcMonitor.right
+				|| rcCur.bottom != m_rcMonitor.bottom)
+			{
+				break;
+			}
+			//BOOL rt = SetWindowPos(host_window_, NULL, nX, nY,
+			//	nScreenW, nScreenH, /*SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE*/0);
+			//BOOL rt = TRUE;
+			//if (!rt) {
+			//	break;
+			//}
+
+			magnifier_capture_succeeded_ = false;
+
+			TlsSetValue(GetTlsIndex(), this);
+
+			__try
+			{
+			// OnCaptured will be called via OnMagImageScalingCallback and fill in the
+			// frame before set_window_source_func_ returns.
+				BOOL rt = set_window_source_func_(magnifier_window_, native_rect);
+				++result;			// step 2
+				if (!rt)
+				{
+					break;
+				}
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+				result = -1000;
+				return result;
+			}
+
+			result = magnifier_capture_succeeded_ ? 0 : -2;			// suc
+			frame = m_curFrame;
+		} while (false);
+
+
+    return result;
+}
+
+
+int MagnifierCapture::OnDisplayChange(DWORD width, DWORD height)
+{
+	int result = 0;
+	//auto rc = x_test::GetMonitorPos(m_targetName);
+	//int nX = /*GetSystemMetrics(SM_XVIRTUALSCREEN)*/rc.left;
+	//int nY = /*GetSystemMetrics(SM_YVIRTUALSCREEN)*/rc.top;
+	//int nScreenW = /*GetSystemMetrics(SM_CXVIRTUALSCREEN)*/rc.right - rc.left;
+	//int nScreenH = /*GetSystemMetrics(SM_CYVIRTUALSCREEN)*/rc.bottom - rc.top;
+	//BOOL rt = SetWindowPos(host_window_, NULL, nX, nY,
+	//	nScreenW, nScreenH, 0);
+	//UninitWindow();
+	if (magnifier_initialized_)
+	{
+		magnifier_initialized_ = false;
+		Uninit();
+	}
+	result = Init(m_targetName);
+	magnifier_initialized_ = result == 0;
+	return result;
+}
+
+int MagnifierCapture::OnHostResize()
+{
+	int result = 0;
+	//if (magnifier_window_ != NULL)
+	//{
+	//	RECT magWindowRect = { 0 };
+	//	GetClientRect(host_window_, &magWindowRect);
+	//	// Resize the control to fill the window.
+	//	SetWindowPos(magnifier_window_, NULL,
+	//		magWindowRect.left, magWindowRect.top, magWindowRect.right, magWindowRect.bottom, 0);
+	//}
+	if (magnifier_initialized_)
+	{
+		magnifier_initialized_ = false;
+		Uninit();
+	}
+	result = Init(m_targetName);
+	magnifier_initialized_ = result == 0;
+	return result;
+}
+
+
+void MagnifierCapture::SetTargetName(const std::wstring& name)
+{
+	m_targetName = name;
+}
+
+std::wstring MagnifierCapture::GetTargetName() const
+{
+	return m_targetName;
+}
