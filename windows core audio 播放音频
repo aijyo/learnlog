@@ -1,1 +1,133 @@
 https://wenku.csdn.net/answer/eg3y8h6afg
+#include <windows.h>
+#include <mmdeviceapi.h>
+#include <Audioclient.h>
+#include <iostream>
+
+int main()
+{
+	HRESULT hr;
+	int step = 0;
+	IMMDeviceEnumerator* pEnumerator = NULL;
+	IMMDevice* pDevice = NULL;
+	IAudioClient* pAudioClient = NULL;
+	WAVEFORMATEX* pWaveFormat = NULL;
+	do
+	{
+		//initial com
+		hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+		
+		if (FAILED(hr))
+		{
+			++step;
+			break;
+		}
+
+		// create device enumerator
+		IMMDeviceEnumerator* pEnumerator = NULL;
+		hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL
+			, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// make default auido render device
+		hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// active deveice interface
+		hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL
+			, NULL, (void**)&pAudioClient);
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// set audio format
+		hr = pAudioClient->GetMixFormat(&pWaveFormat);
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// init audio stream
+		hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000
+			, 0, pWaveFormat, NULL);
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// get audio buffer
+		IAudioRenderClient* pRenderClient = NULL;
+		hr = pAudioClient->GetService(__uuidof(IAudioRenderClient), (void**)&pRenderClient);
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// start audio stream
+		hr = pAudioClient->Start();
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// write audio data
+		UINT32 bufferSize = 0;
+		BYTE* pData = NULL;
+		hr = pRenderClient->GetBuffer(bufferSize, &pData);
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		// write audio data to buffer
+
+		// release audio buffer
+		hr = pRenderClient->ReleaseBuffer(bufferSize, 0);
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		hr = pAudioClient->Stop();
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+
+	} while (false);
+
+	if (pWaveFormat)
+	{
+		CoTaskMemFree(pWaveFormat);
+	}
+	if (pAudioClient)
+	{
+		pAudioClient->Release();
+	}
+	if (pDevice)
+	{
+		pDevice->Release();
+	}
+
+	if (pEnumerator)
+	{
+		pEnumerator->Release();
+	}
+
+	if (step > 0)
+	{
+		CoUninitialize();
+	}
+
+	return 0;
+}
