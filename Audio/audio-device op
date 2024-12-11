@@ -1,75 +1,107 @@
-#include <windows.h>
-#include <mmdeviceapi.h>
-#include <mmsystem.h>
-#include <iostream>
+//#include <windows.h>
+//#include <mmdeviceapi.h>
+//#include <mmsystem.h>
+//#include <iostream>
+//#include <Mmddk.h>
+//
+//// 检查 HRESULT 返回值
+//void CheckHR(HRESULT hr, const char* message) {
+//    if (FAILED(hr)) {
+//        std::cerr << "Error: " << message << " (HRESULT: " << std::hex << hr << ")" << std::endl;
+//        exit(hr);
+//    }
+//}
 
-// 检查 HRESULT 返回值
-void CheckHR(HRESULT hr, const char* message) {
-    if (FAILED(hr)) {
-        std::cerr << "Error: " << message << " (HRESULT: " << std::hex << hr << ")" << std::endl;
-        exit(hr);
-    }
-}
-
-// 获取指定 IMMDevice 的 WaveOut 设备 ID
-UINT GetWaveOutDeviceId(IMMDevice* pDevice) {
-    WCHAR* deviceId = nullptr;
-    HRESULT hr = pDevice->GetId(&deviceId);
-    CheckHR(hr, "Failed to get IMMDevice ID");
-
-    UINT waveOutDeviceCount = waveOutGetNumDevs();
-    WAVEOUTCAPS caps;
-
-    for (UINT i = 0; i < waveOutDeviceCount; ++i) {
-        // 获取 WaveOut 设备信息
-        if (waveOutGetDevCaps(i, &caps, sizeof(WAVEOUTCAPS)) == MMSYSERR_NOERROR) {
-            // 获取 WaveOut 设备对应的 IMMDevice ID
-            WCHAR waveDeviceId[256] = {};
-            MMRESULT result = waveOutMessage((HWAVEOUT)(UINT_PTR)i, DRVM_MAPPER_PREFERRED_GET, (DWORD_PTR)waveDeviceId, sizeof(waveDeviceId));
-
-            if (result == MMSYSERR_NOERROR) {
-                // 检查是否与目标 IMMDevice 的 ID 匹配
-                if (wcscmp(deviceId, waveDeviceId) == 0) {
-                    CoTaskMemFree(deviceId);  // 释放分配的内存
-                    return i;  // 返回匹配的 WaveOut 设备 ID
-                }
-            }
-        }
-    }
-
-    CoTaskMemFree(deviceId);
-    throw std::runtime_error("No matching WaveOut device found.");
-}
-
-int main() {
-    CoInitialize(nullptr);
-
-    // 创建 IMMDeviceEnumerator
-    IMMDeviceEnumerator* pEnumerator = nullptr;
-    HRESULT hr = CoCreateInstance(
-        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-    CheckHR(hr, "Failed to create IMMDeviceEnumerator");
-
-    // 获取默认音频设备
-    IMMDevice* pDevice = nullptr;
-    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
-    CheckHR(hr, "Failed to get default audio endpoint");
-
-    try {
-        // 转换为 WaveOut 设备 ID
-        UINT waveOutId = GetWaveOutDeviceId(pDevice);
-        std::cout << "Corresponding WaveOut device ID: " << waveOutId << std::endl;
-    } catch (const std::exception& ex) {
-        std::cerr << ex.what() << std::endl;
-    }
-
-    // 清理
-    pDevice->Release();
-    pEnumerator->Release();
-    CoUninitialize();
-
-    return 0;
-}
+//UINT FindDevice(const wchar_t* preferredDevice) {
+//    UINT deviceID = WAVE_MAPPER;
+//
+//    if (preferredDevice && *preferredDevice) {
+//        UINT numDevices = waveOutGetNumDevs();
+//
+//        for (UINT i = 0; i < numDevices; ++i) {
+//            WAVEOUTCAPSW caps = { 0 };
+//
+//            if (MMSYSERR_NOERROR == waveOutGetDevCapsW(i, &caps, sizeof(caps))) 
+//            {
+//                // 检查是否与目标 IMMDevice 的 ID 匹配
+//                if (wcscmp(deviceId, waveDeviceId) == 0) {
+//                    CoTaskMemFree(deviceId);  // 释放分配的内存
+//                    return i;  // 返回匹配的 WaveOut 设备 ID
+//                }
+//                const VDStringSpanW key(caps.szPname);
+//
+//                if (key == preferredDevice) {
+//                    deviceID = i;
+//                    break;
+//                }
+//            }
+//        }
+//    }
+//
+//    return deviceID;
+//}
+//
+//// 获取指定 IMMDevice 的 WaveOut 设备 ID
+//UINT GetWaveOutDeviceId(IMMDevice* pDevice) {
+//    WCHAR* deviceId = nullptr;
+//    HRESULT hr = pDevice->GetId(&deviceId);
+//    CheckHR(hr, "Failed to get IMMDevice ID");
+//
+//    UINT waveOutDeviceCount = waveOutGetNumDevs();
+//    WAVEOUTCAPS caps;
+//
+//    for (UINT i = 0; i < waveOutDeviceCount; ++i) {
+//        // 获取 WaveOut 设备信息
+//        if (waveOutGetDevCaps(i, &caps, sizeof(WAVEOUTCAPS)) == MMSYSERR_NOERROR) {
+//            // 获取 WaveOut 设备对应的 IMMDevice ID
+//            WCHAR waveDeviceId[256] = {};
+//            //DWORD statusFlags;DRV_QUERYDEVICEINTERFACESIZE
+//            MMRESULT result = waveOutMessage((HWAVEOUT)(UINT_PTR)i, DRV_QUERYDEVICEINTERFACE, (DWORD_PTR)waveDeviceId, sizeof(waveDeviceId));
+//
+//            if (result == MMSYSERR_NOERROR) {
+//                // 检查是否与目标 IMMDevice 的 ID 匹配
+//                if (wcscmp(deviceId, waveDeviceId) == 0) {
+//                    CoTaskMemFree(deviceId);  // 释放分配的内存
+//                    return i;  // 返回匹配的 WaveOut 设备 ID
+//                }
+//            }
+//        }
+//    }
+//
+//    CoTaskMemFree(deviceId);
+//    throw std::runtime_error("No matching WaveOut device found.");
+//}
+//
+//int main() {
+//    CoInitialize(nullptr);
+//
+//    // 创建 IMMDeviceEnumerator
+//    IMMDeviceEnumerator* pEnumerator = nullptr;
+//    HRESULT hr = CoCreateInstance(
+//        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+//    CheckHR(hr, "Failed to create IMMDeviceEnumerator");
+//
+//    // 获取默认音频设备
+//    IMMDevice* pDevice = nullptr;
+//    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+//    CheckHR(hr, "Failed to get default audio endpoint");
+//
+//    try {
+//        // 转换为 WaveOut 设备 ID
+//        UINT waveOutId = GetWaveOutDeviceId(pDevice);
+//        std::cout << "Corresponding WaveOut device ID: " << waveOutId << std::endl;
+//    }
+//    catch (const std::exception& ex) {
+//        std::cerr << ex.what() << std::endl;
+//    }
+//
+//    // 清理
+//    pDevice->Release();
+//    pEnumerator->Release();
+//    CoUninitialize();
+//
+//    return 0;
+//}
 
 
 
@@ -81,6 +113,7 @@ int main() {
 #include <windows.h>
 #include <iostream>
 #include <string>
+#include <functiondiscoverykeys.h>
 
 // 检查 HRESULT 返回值
 void CheckHR(HRESULT hr, const char* message) {
@@ -142,7 +175,7 @@ IMMDevice* GetAudioDevice(const std::wstring& deviceName) {
     pDeviceEnumerator->Release();
 
     if (!pDevice) {
-        std::cerr << "Audio device not found: " << std::wstring(deviceName.begin(), deviceName.end()) << std::endl;
+        //std::cerr << "Audio device not found: " << std::wstring(deviceName.begin(), deviceName.end()) << std::endl;
         exit(1);
     }
 
@@ -185,7 +218,7 @@ int main() {
     CheckHR(hr, "Failed to initialize Media Foundation");
 
     // 指定音频设备名称
-    std::wstring targetDeviceName = L"Speakers (Realtek Audio)";
+    std::wstring targetDeviceName = L"耳机 (Realtek(R) Audio)";
 
     // 获取指定音频设备
     IMMDevice* pAudioDevice = GetAudioDevice(targetDeviceName);
