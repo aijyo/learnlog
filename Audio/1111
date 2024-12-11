@@ -1,0 +1,223 @@
+#include <windows.h>
+#include <mmdeviceapi.h>
+#include <mmsystem.h>
+#include <iostream>
+
+// 检查 HRESULT 返回值
+void CheckHR(HRESULT hr, const char* message) {
+    if (FAILED(hr)) {
+        std::cerr << "Error: " << message << " (HRESULT: " << std::hex << hr << ")" << std::endl;
+        exit(hr);
+    }
+}
+
+// 获取指定 IMMDevice 的 WaveOut 设备 ID
+UINT GetWaveOutDeviceId(IMMDevice* pDevice) {
+    WCHAR* deviceId = nullptr;
+    HRESULT hr = pDevice->GetId(&deviceId);
+    CheckHR(hr, "Failed to get IMMDevice ID");
+
+    UINT waveOutDeviceCount = waveOutGetNumDevs();
+    WAVEOUTCAPS caps;
+
+    for (UINT i = 0; i < waveOutDeviceCount; ++i) {
+        // 获取 WaveOut 设备信息
+        if (waveOutGetDevCaps(i, &caps, sizeof(WAVEOUTCAPS)) == MMSYSERR_NOERROR) {
+            // 获取 WaveOut 设备对应的 IMMDevice ID
+            WCHAR waveDeviceId[256] = {};
+            MMRESULT result = waveOutMessage((HWAVEOUT)(UINT_PTR)i, DRVM_MAPPER_PREFERRED_GET, (DWORD_PTR)waveDeviceId, sizeof(waveDeviceId));
+
+            if (result == MMSYSERR_NOERROR) {
+                // 检查是否与目标 IMMDevice 的 ID 匹配
+                if (wcscmp(deviceId, waveDeviceId) == 0) {
+                    CoTaskMemFree(deviceId);  // 释放分配的内存
+                    return i;  // 返回匹配的 WaveOut 设备 ID
+                }
+            }
+        }
+    }
+
+    CoTaskMemFree(deviceId);
+    throw std::runtime_error("No matching WaveOut device found.");
+}
+
+int main() {
+    CoInitialize(nullptr);
+
+    // 创建 IMMDeviceEnumerator
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    HRESULT hr = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    CheckHR(hr, "Failed to create IMMDeviceEnumerator");
+
+    // 获取默认音频设备
+    IMMDevice* pDevice = nullptr;
+    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+    CheckHR(hr, "Failed to get default audio endpoint");
+
+    try {
+        // 转换为 WaveOut 设备 ID
+        UINT waveOutId = GetWaveOutDeviceId(pDevice);
+        std::cout << "Corresponding WaveOut device ID: " << waveOutId << std::endl;
+    } catch (const std::exception& ex) {
+        std::cerr << ex.what() << std::endl;
+    }
+
+    // 清理
+    pDevice->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+
+    return 0;
+}
+
+
+
+#include <mfapi.h>
+#include <mfplay.h>
+#include <mfobjects.h>
+#include <mfmediaengine.h>
+#include <mmdeviceapi.h>
+#include <windows.h>
+#include <iostream>
+#include <string>
+
+// 检查 HRESULT 返回值
+void CheckHR(HRESULT hr, const char* message) {
+    if (FAILED(hr)) {
+        std::cerr << "Error: " << message << " (HRESULT: " << std::hex << hr << ")" << std::endl;
+        exit(hr);
+    }
+}
+
+// 获取特定的音频设备
+IMMDevice* GetAudioDevice(const std::wstring& deviceName) {
+    IMMDeviceEnumerator* pDeviceEnumerator = nullptr;
+    IMMDeviceCollection* pDeviceCollection = nullptr;
+    IMMDevice* pDevice = nullptr;
+
+    // 创建设备枚举器
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pDeviceEnumerator);
+    CheckHR(hr, "Failed to create IMMDeviceEnumerator");
+
+    // 获取音频设备列表
+    hr = pDeviceEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDeviceCollection);
+    CheckHR(hr, "Failed to enumerate audio devices");
+
+    // 遍历设备，找到匹配的设备名称
+    UINT count;
+    hr = pDeviceCollection->GetCount(&count);
+    CheckHR(hr, "Failed to get audio device count");
+
+    for (UINT i = 0; i < count; i++) {
+        IMMDevice* pCurrentDevice = nullptr;
+        IPropertyStore* pPropertyStore = nullptr;
+
+        hr = pDeviceCollection->Item(i, &pCurrentDevice);
+        CheckHR(hr, "Failed to get audio device");
+
+        // 获取设备友好名称
+        hr = pCurrentDevice->OpenPropertyStore(STGM_READ, &pPropertyStore);
+        CheckHR(hr, "Failed to open property store");
+
+        PROPVARIANT varName;
+        PropVariantInit(&varName);
+        hr = pPropertyStore->GetValue(PKEY_Device_FriendlyName, &varName);
+        CheckHR(hr, "Failed to get device name");
+
+        // 检查设备名称是否匹配
+        if (deviceName == varName.pwszVal) {
+            pDevice = pCurrentDevice;
+            pCurrentDevice->AddRef();
+        }
+
+        PropVariantClear(&varName);
+        pPropertyStore->Release();
+        pCurrentDevice->Release();
+
+        if (pDevice) break;
+    }
+
+    pDeviceCollection->Release();
+    pDeviceEnumerator->Release();
+
+    if (!pDevice) {
+        std::cerr << "Audio device not found: " << std::wstring(deviceName.begin(), deviceName.end()) << std::endl;
+        exit(1);
+    }
+
+    return pDevice;
+}
+
+// 配置媒体引擎
+IMFMediaEngine* CreateMediaEngineWithDevice(IMMDevice* pAudioDevice) {
+    IMFMediaEngine* pMediaEngine = nullptr;
+    IMFMediaEngineClassFactory* pFactory = nullptr;
+
+    // 创建媒体引擎属性存储
+    IMFAttributes* pAttributes = nullptr;
+    HRESULT hr = MFCreateAttributes(&pAttributes, 1);
+    CheckHR(hr, "Failed to create attributes");
+
+    // 设置音频端点
+    hr = pAttributes->SetUnknown(MF_AUDIO_RENDERER_ATTRIBUTE_ENDPOINT_ID, pAudioDevice);
+    CheckHR(hr, "Failed to set audio device attribute");
+
+    // 创建媒体引擎
+    hr = CoCreateInstance(CLSID_MFMediaEngineClassFactory, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pFactory));
+    CheckHR(hr, "Failed to create IMFMediaEngineClassFactory");
+
+    hr = pFactory->CreateInstance(0, pAttributes, &pMediaEngine);
+    CheckHR(hr, "Failed to create IMFMediaEngine");
+
+    pAttributes->Release();
+    pFactory->Release();
+
+    return pMediaEngine;
+}
+
+int main() {
+    // 初始化 COM 和媒体基础设施
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    CheckHR(hr, "Failed to initialize COM");
+
+    hr = MFStartup(MF_VERSION);
+    CheckHR(hr, "Failed to initialize Media Foundation");
+
+    // 指定音频设备名称
+    std::wstring targetDeviceName = L"Speakers (Realtek Audio)";
+
+    // 获取指定音频设备
+    IMMDevice* pAudioDevice = GetAudioDevice(targetDeviceName);
+
+    // 创建带有音频设备的媒体引擎
+    IMFMediaEngine* pMediaEngine = CreateMediaEngineWithDevice(pAudioDevice);
+
+    // 创建 IMFMediaPlayer 并加载音频文件
+    IMFPMediaPlayer* pMediaPlayer = nullptr;
+    hr = MFPCreateMediaPlayer(
+        nullptr,       // 不显示 UI
+        FALSE,         // 无视频窗口
+        0,             // 初始化标志
+        nullptr,       // 回调
+        nullptr,       // 用户上下文
+        &pMediaPlayer  // 返回的媒体播放器
+    );
+    CheckHR(hr, "Failed to create IMFPMediaPlayer");
+
+    // 使用 pMediaEngine 配置播放器的音频输出
+    // pMediaPlayer->SetMediaEngine(pMediaEngine); (假设有类似方法)
+
+    std::wcout << L"Audio device successfully set to: " << targetDeviceName << std::endl;
+
+    // 清理资源
+    pMediaPlayer->Release();
+    pMediaEngine->Release();
+    pAudioDevice->Release();
+
+    MFShutdown();
+    CoUninitialize();
+
+    return 0;
+}
+
