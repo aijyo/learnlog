@@ -1,0 +1,63 @@
+int VideoReceiveStream2::DecodeAndMaybeDispatchEncodedFrame
+    if (!pending_resolution.has_value() || !pending_resolution->empty()) {
+      // Flush the buffered frames.
+      for (const auto& frame : buffered_encoded_frames_) {
+        RecordableEncodedFrame::EncodedResolution resolution{
+            frame->EncodedImage()._encodedWidth,
+            frame->EncodedImage()._encodedHeight};
+        if (IsKeyFrameAndUnspecifiedResolution(*frame)) {
+          RTC_DCHECK(!pending_resolution->empty());
+          resolution = *pending_resolution;
+        }
+        encoded_frame_buffer_function_(
+            WebRtcRecordableEncodedFrame(*frame, resolution));
+      }
+      buffered_encoded_frames_.clear();
+    }
+
+
+encoded_frame_buffer_function_ 来自：
+    VideoReceiveStream2::SetAndGetRecordingState(RecordingState state,
+                                             bool generate_key_frame) 
+
+SetAndGetRecordingState来自：
+void WebRtcVideoChannel::WebRtcVideoReceiveStream::
+    SetRecordableEncodedFrameCallback
+
+stream->SetRecordableEncodedFrameCallback(std::move(callback));来自：
+
+void WebRtcVideoChannel::SetRecordableEncodedFrameCallback(
+    uint32_t ssrc,
+    std::function<void(const webrtc::RecordableEncodedFrame&)> callback) {
+  RTC_DCHECK_RUN_ON(&thread_checker_);
+  WebRtcVideoReceiveStream* stream = FindReceiveStream(ssrc);
+  if (stream) {
+    stream->SetRecordableEncodedFrameCallback(std::move(callback));
+  } else {
+    RTC_LOG(LS_ERROR) << "Absent receive stream; ignoring setting encoded "
+                         "frame sink for ssrc "
+                      << ssrc;
+  }
+}
+
+WebRtcVideoChannel::SetRecordableEncodedFrameCallback来自：
+void VideoRtpReceiver::SetEncodedSinkEnabled(bool enable) {
+  RTC_DCHECK_RUN_ON(worker_thread_);
+  if (!media_channel_)
+    return;
+
+  // TODO(bugs.webrtc.org/8694): Stop using 0 to mean unsignalled SSRC
+  const auto ssrc = ssrc_.value_or(0);
+
+  if (enable) {
+    media_channel_->SetRecordableEncodedFrameCallback(
+        ssrc, [source = source_](const RecordableEncodedFrame& frame) {
+          source->BroadcastRecordableEncodedFrame(frame);
+        });
+  } else {
+    media_channel_->ClearRecordableEncodedFrameCallback(ssrc);
+  }
+}
+
+
+callback_->OnEncodedSinkEnabled(true); 最终：void VideoRtpTrackSource::AddEncodedSink
