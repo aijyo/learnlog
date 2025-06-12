@@ -1,3 +1,6 @@
+AI 文档：
+https://chatgpt.com/canvas/shared/684a75ff71f88191b2b2648452779df1
+
 int VideoReceiveStream2::DecodeAndMaybeDispatchEncodedFrame
     if (!pending_resolution.has_value() || !pending_resolution->empty()) {
       // Flush the buffered frames.
