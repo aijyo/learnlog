@@ -122,6 +122,34 @@ TVM 依赖 DLPack 等 Git 子模块，确保 clone 时使用 --recursive 或初�
 
 git submodule update --init --recursive
 
+更新 LLVM 的推荐操作步骤（适用于 Windows + MSVC 2022）
+1. 设置 Conda 优先使用 conda-forge 通道
+
+为了从 conda-forge 获取最新、与 VS2022 最新编译器兼容的 LLVM，你可以将 conda-forge 放到优先通道（确保在 .condarc 中优先）：
+
+conda config --add channels conda-forge
+conda config --set channel_priority strict
+
+
+这样在执行 conda install 时，会优先从 conda-forge 获取包版本。
+
+Stack Overflow
+
+2. 安装最新可用的 llvmdev
+
+在设置好频道优先级之后，执行：
+
+conda install llvmdev
+
+
+这将安装来自 conda-forge 的最新构建版本（目前为 v21.1.0）
+Anaconda
+。
+
+此版本默认已使用 VS2022 编译器 构建，与 MSVC 14.3x 兼容，可避免符号错误等问题 
+conda-forge.org
++1
+。
 
 6>  正在创建库 D:/code/gitcode/tvm/build/Release/tvm_allvisible.lib 和对象 D:/code/gitcode/tvm/build/Release/tvm_allvisible.exp
 7>LLVMBitReader.lib(BitcodeReader.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
