@@ -35,6 +35,28 @@ conda install -c conda-forge zlib
 TVM 编译需要 Zlib，确保安装并记录路径。
 
 5. 编译 TVM
+cd tvm
+rm -rf build && mkdir build && cd build
+# Specify the build configuration via CMake options
+cp ../cmake/config.cmake .
+
+然后再 config.cmake文件中添加：set(USE_LLVM ON)
+
+set(HIDE_PRIVATE_SYMBOLS ON)
+
+set(USE_CUDA   OFF)
+
+set(USE_METAL  OFF)
+
+set(USE_VULKAN OFF)
+
+set(USE_OPENCL OFF)
+
+set(USE_CUBLAS OFF)
+
+set(USE_CUDNN  OFF)
+
+set(USE_CUTLASS OFF)
 
 配置 CMake：
 
