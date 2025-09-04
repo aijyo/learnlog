@@ -121,3 +121,88 @@ Python 扩展和构建类型必须一致（Release 或 Debug），否则可能�
 TVM 依赖 DLPack 等 Git 子模块，确保 clone 时使用 --recursive 或初始化子模块：
 
 git submodule update --init --recursive
+
+
+6>  正在创建库 D:/code/gitcode/tvm/build/Release/tvm_allvisible.lib 和对象 D:/code/gitcode/tvm/build/Release/tvm_allvisible.exp
+7>LLVMBitReader.lib(BitcodeReader.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMCore.lib(AutoUpgrade.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMWindowsDriver.lib(MSVCPaths.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMVectorize.lib(SeedCollection.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMInstrumentation.lib(DataFlowSanitizer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMAsmPrinter.lib(CodeViewDebug.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMX86CodeGen.lib(X86Subtarget.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMBitReader.lib(BitcodeReader.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMCore.lib(AutoUpgrade.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMWindowsDriver.lib(MSVCPaths.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMVectorize.lib(SeedCollection.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMInstrumentation.lib(DataFlowSanitizer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMAsmPrinter.lib(CodeViewDebug.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMX86CodeGen.lib(X86Subtarget.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMSPIRVCodeGen.lib(SPIRVEmitIntrinsics.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMSPIRVCodeGen.lib(SPIRVBuiltins.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMAArch64CodeGen.lib(AArch64Arm64ECCallLowering.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMSPIRVCodeGen.lib(SPIRVEmitIntrinsics.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMSPIRVCodeGen.lib(SPIRVBuiltins.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+6>LLVMAArch64CodeGen.lib(AArch64Arm64ECCallLowering.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_search_1
+7>LLVMX86Desc.lib(X86InstComments.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_find_first_of_trivial_pos_1，函数 "unsigned __int64 __cdecl std::_Find_first_of_pos_vectorized<char,char>(char const * const,unsigned __int64,char const * const,unsigned __int64)" (??$_Find_first_of_pos_vectorized@DD@std@@YA_KQEBD_K01@Z) 中引用了该符号
+7>LLVMProfileData.lib(InstrProf.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_find_first_of_trivial_pos_1
+7>LLVMSPIRVCodeGen.lib(SPIRVBuiltins.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_find_end_1，函数 "char const * __cdecl std::_Find_end_vectorized<char const ,char const >(char const * const,char const * const,char const * const,unsigned __int64)" (??$_Find_end_vectorized@$$CBD$$CBD@std@@YAPEBDQEBD00_K@Z) 中引用了该符号
+7>LLVMSupport.lib(StringRef.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_find_end_1
+7>LLVMCore.lib(Dominators.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMTransformUtils.lib(CodeLayout.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMX86Desc.lib(X86InstComments.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_find_first_of_trivial_pos_1，函数 "unsigned __int64 __cdecl std::_Find_first_of_pos_vectorized<char,char>(char const * const,unsigned __int64,char const * const,unsigned __int64)" (??$_Find_first_of_pos_vectorized@DD@std@@YA_KQEBD_K01@Z) 中引用了该符号
+6>LLVMProfileData.lib(InstrProf.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_find_first_of_trivial_pos_1
+6>LLVMSPIRVCodeGen.lib(SPIRVBuiltins.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_find_end_1，函数 "char const * __cdecl std::_Find_end_vectorized<char const ,char const >(char const * const,char const * const,char const * const,unsigned __int64)" (??$_Find_end_vectorized@$$CBD$$CBD@std@@YAPEBDQEBD00_K@Z) 中引用了该符号
+6>LLVMSupport.lib(StringRef.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_find_end_1
+6>LLVMCore.lib(Dominators.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMTransformUtils.lib(CodeLayout.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMTransformUtils.lib(LoopConstrainer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMTransformUtils.lib(LoopConstrainer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMAnalysis.lib(MemorySSA.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMAnalysis.lib(MemorySSAUpdater.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMScalarOpts.lib(GVNHoist.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMTransformUtils.lib(SSAUpdaterBulk.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMTransformUtils.lib(LoopUnroll.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMTransformUtils.lib(PromoteMemoryToRegister.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMCodeGen.lib(WinEHPrepare.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMCodeGen.lib(MachineDominators.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMCodeGen.lib(MachinePostDominators.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMScalarOpts.lib(ADCE.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMSelectionDAG.lib(SelectionDAGISel.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMCodeGen.lib(MachineFunction.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMCodeGen.lib(MachineBlockPlacement.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMCodeGen.lib(RegisterCoalescer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(VPlanConstruction.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(VPlanTransforms.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(DependencyGraph.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMInstrumentation.lib(DataFlowSanitizer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(SLPVectorizer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(VPlanAnalysis.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(VPlan.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMVectorize.lib(VPlanVerifier.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+7>LLVMDemangle.lib(RustDemangle.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_remove_1，函数 "char * __cdecl std::_Remove_vectorized<char,char>(char * const,char * const,char)" (??$_Remove_vectorized@DD@std@@YAPEADQEAD0D@Z) 中引用了该符号
+7>D:\code\gitcode\tvm\build\Release\tvm.dll : fatal error LNK1120: 5 个无法解析的外部命令
+6>LLVMAnalysis.lib(MemorySSA.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMAnalysis.lib(MemorySSAUpdater.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMScalarOpts.lib(GVNHoist.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMTransformUtils.lib(SSAUpdaterBulk.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMTransformUtils.lib(LoopUnroll.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMTransformUtils.lib(PromoteMemoryToRegister.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMCodeGen.lib(WinEHPrepare.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMCodeGen.lib(MachineDominators.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMCodeGen.lib(MachinePostDominators.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMScalarOpts.lib(ADCE.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMSelectionDAG.lib(SelectionDAGISel.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMCodeGen.lib(MachineFunction.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMCodeGen.lib(MachineBlockPlacement.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMCodeGen.lib(RegisterCoalescer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(VPlanConstruction.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(VPlanTransforms.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(DependencyGraph.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMInstrumentation.lib(DataFlowSanitizer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(SLPVectorizer.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(VPlanAnalysis.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(VPlan.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMVectorize.lib(VPlanVerifier.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
+6>LLVMDemangle.lib(RustDemangle.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_remove_1，函数 "char * __cdecl std::_Remove_vectorized<char,char>(char * const,char * const,char)" (??$_Remove_vectorized@DD@std@@YAPEADQEAD0D@Z) 中引用了该符号
+6>D:\code\gitcode\tvm\build\Release\tvm_allvisible.dll : fatal error LNK1120: 5 个无法解析的外部命令
