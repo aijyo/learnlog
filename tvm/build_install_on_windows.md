@@ -45,6 +45,8 @@ set(CMAKE_BUILD_TYPE Release)
 
 set(USE_LLVM ON)
 
+set(LLVM_DIR "D:/code/gitcode/install-llvm/lib/cmake/llvm")
+
 set(HIDE_PRIVATE_SYMBOLS ON)
 
 set(USE_CUDA   OFF)
@@ -71,7 +73,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release `
 
 编译 TVM：
 
-cmake --build . --config Release --parallel $(nproc)
+cmake --build . --config Release --parallel
 
 
 注意：Windows 上 Release 构建生成的 Python 扩展为 .dll 文件，需要后续处理。
