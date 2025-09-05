@@ -107,8 +107,13 @@ $env:TVM_LIBRARY_PATH = "<tvm_root>/build"
 
 
 安装 TVM：
+cd D:/code/gitcode/tvm/ffi
+pip install .
 
-pip install -e <tvm_root>/python
+cd D:/code/gitcode/tvm/build
+pip3 install -e D:/code/gitcode/tvm/python
+
+##pip install -e <tvm_root>/python
 
 
 安装完成后，你可以在 Python 中执行 import tvm 并加载 tvm_ffi。
