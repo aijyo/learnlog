@@ -87,6 +87,10 @@ set(USE_CUTLASS OFF)
 
 ### 4. CMake 配置与编译
 ```bash
+set PATH=D:\code\gitcode\llvm-project\install-llvm\bin;%PATH%
+where llvm-config
+where llc
+
 cd D:/code/gitcode/tvm/build
 cmake ..
 cmake --build . --config Release --parallel
