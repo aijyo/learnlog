@@ -66,9 +66,7 @@ set(USE_CUTLASS OFF)
 配置 CMake：
 
 cd <tvm_root>/build
-cmake .. -DCMAKE_BUILD_TYPE=Release `
-  -DZLIB_INCLUDE_DIR="D:/ProgramData/anaconda3/envs/tvm-build-venv/Library/include" `
-  -DZLIB_LIBRARY="D:/ProgramData/anaconda3/envs/tvm-build-venv/Library/lib/zlib.lib"
+cmake ..
 
 
 编译 TVM：
@@ -79,9 +77,17 @@ cmake --build . --config Release --parallel
 注意：Windows 上 Release 构建生成的 Python 扩展为 .dll 文件，需要后续处理。
 
 6. 安装 Python 包
+
+   
 6.1 安装 FFI 模块
-cd <tvm_root>/build/ffi
+
+   
+cd <tvm_root>/ffi
+
+
 pip install .
+
+
 cd ../..
 
 
