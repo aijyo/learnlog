@@ -94,7 +94,7 @@ where llc
 
 cd D:/code/gitcode/tvm/build
 cmake ..
-cmake --build . --config Release --parallel
+cmake --build . --config Release
 ```
 
 ### 5. Python 绑定与安装
