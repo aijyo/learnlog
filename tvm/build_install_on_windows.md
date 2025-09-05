@@ -234,3 +234,91 @@ conda-forge.org
 6>LLVMVectorize.lib(VPlanVerifier.cpp.obj) : error LNK2001: 无法解析的外部符号 __std_remove_8
 6>LLVMDemangle.lib(RustDemangle.cpp.obj) : error LNK2019: 无法解析的外部符号 __std_remove_1，函数 "char * __cdecl std::_Remove_vectorized<char,char>(char * const,char * const,char)" (??$_Remove_vectorized@DD@std@@YAPEADQEAD0D@Z) 中引用了该符号
 6>D:\code\gitcode\tvm\build\Release\tvm_allvisible.dll : fatal error LNK1120: 5 个无法解析的外部命令
+
+
+但核心思路是：把“编译器/标准库(STL) + 运行库 + LLVM 二进制”的来源统一。你现在是“VS 的 MSVC 工具链 + Conda 的 LLVM”，两边的 MSVC STL 内部符号版本对不上，才会出现 __std_search_1 / __std_remove_8 之类的未解析。
+
+给你两条可行路径，任选其一（不要混搭）：
+
+路线 1：统一到 VS 工具链（最省心）
+
+把 TVM 改为链接 VS 安装的 LLVM（而不是 Conda 的 LLVM）。这样“编译器/标准库/LLVM”全部来自 VS 工具链，版本天然对齐。
+
+在 VS Installer 里更新到最新 VS2022 + v143 工具集 + Win10/11 SDK。
+
+找到 VS 自带的 LLVM 的 CMake 包路径（常见位置其一）：
+
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\lib\cmake\llvm
+
+
+用 “x64 Native Tools Command Prompt for VS 2022” 全新配置/编译 TVM：
+
+cd D:\code\gitcode\tvm
+rmdir /S /Q build
+mkdir build & cd build
+
+cmake -G "Visual Studio 17 2022" -A x64 -T v143 ^
+  -DUSE_LLVM=ON ^
+  -DLLVM_DIR="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\lib\cmake\llvm" ^
+  -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL ^
+  ..
+
+cmake --build . --config Release --parallel
+
+
+要点：
+
+强制 -T v143；
+
+用 VS 的 LLVM_DIR；
+
+统一运行库为 /MD（MultiThreadedDLL），避免和外部库冲突。
+
+路线 2：统一到 Conda（进阶）
+
+让编译 TVM 的编译器/链接器/标准库与 LLVM 都来自 Conda。难点是 clang-cl 仍需调用本机 VS 的头文件/库，一旦版本差异仍会踩坑；因此这条路通常需要你用本机 VS 工具链重编 LLVM（或确保 Conda 的 LLVM 和你本机的 MSVC STL 完全匹配）。如果你坚持 Conda：
+
+A. 先尽量“同一个工具链打包”：
+
+激活你的 Conda 环境；
+
+使用 Ninja + clang-cl 配置（尽量减少 VS 生成器的干预）：
+
+conda activate yourenv
+
+cd D:\code\gitcode\tvm
+rmdir /S /Q build
+mkdir build & cd build
+
+cmake -G "Ninja" ^
+  -DCMAKE_C_COMPILER=clang-cl ^
+  -DCMAKE_CXX_COMPILER=clang-cl ^
+  -DUSE_LLVM=ON ^
+  -DLLVM_DIR="%CONDA_PREFIX%\Library\lib\cmake\llvm" ^
+  -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL ^
+  ..
+
+cmake --build . --parallel
+
+
+B. 如果还是报 __std_*，说明 Conda 打的 LLVM 用到更新或不同的 MSVC STL 内部符号。此时有两种补救：
+
+用你机器的 VS 工具链把 LLVM 重编一遍（保证与本机 MSVC 完全一致，且 /MD），然后用这个 LLVM_DIR 去编 TVM；
+
+或者放弃 Conda 的 LLVM，改走路线 1（最稳）。
+
+注：给 LLVM 加 _DISABLE_VECTORIZED_ALGORITHMS=1 能避免这些 __std_* 辅助符号，但这必须重编 LLVM 本体才生效，对现有 Conda 二进制无效。
+
+常见坑位自检
+
+混用了 /MT 和 /MD：统一成 /MD（上面用 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL）。
+
+链接命令里意外有 /NODEFAULTLIB:msvcprt 等屏蔽默认库。
+
+构建不是在 x64 Native Tools 里进行，导致 toolset 漂移。
+
+LLVM_DIR 没指向你真正想用的那套 LLVM（VS 的或 Conda 的）。
+
+最简结论
+
+最简单可靠的对齐法：别用 Conda 的 LLVM 做链接；改用 VS 自带/官方安装包的 LLVM（把 LLVM_DIR 指到 VS 的 cmake 目录），然后在 VS 的 x64 Native Tools 里全新配置编译。这样编译器、STL、运行库、LLVM 全部一致，问题就消失了。
