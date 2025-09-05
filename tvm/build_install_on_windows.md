@@ -40,7 +40,10 @@ rm -rf build && mkdir build && cd build
 # Specify the build configuration via CMake options
 cp ../cmake/config.cmake .
 
-然后再 config.cmake文件中添加：set(USE_LLVM ON)
+然后再 config.cmake文件中添加：
+set(CMAKE_BUILD_TYPE Release)
+
+set(USE_LLVM ON)
 
 set(HIDE_PRIVATE_SYMBOLS ON)
 
