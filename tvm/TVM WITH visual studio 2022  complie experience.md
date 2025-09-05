@@ -108,7 +108,7 @@ cd ..
 
 #### (2) 设置环境变量
 ```bash
-set TVM_LIBRARY_PATH="D:/code/gitcode/tvm/build"
+set TVM_LIBRARY_PATH="D:/code/gitcode/tvm/build/release"
 ```
 
 #### (3) 安装 TVM Python 包
