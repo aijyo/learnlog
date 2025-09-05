@@ -87,7 +87,8 @@ set(USE_CUTLASS OFF)
 
 ### 4. CMake 配置与编译
 ```bash
-set PATH=D:\code\gitcode\llvm-project\install-llvm\bin;%PATH%
+###set PATH=D:\code\gitcode\llvm-project\install-llvm\bin;%PATH%
+$env:PATH = "D:\code\gitcode\llvm-project\install-llvm\bin;" + $env:PATH
 where llvm-config
 where llc
 
