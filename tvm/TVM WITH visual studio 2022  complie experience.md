@@ -40,7 +40,7 @@ cmake -S D:\code\gitcode\llvm-project\llvm -B D:\code\gitcode\llvm-project\build
 
 ### 4. 编译与安装
 ```bash
-cmake --build D:\code\gitcode\llvm-project\build-llvm --config Release --parallel
+cmake --build D:\code\gitcode\llvm-project\build-llvm --config Release 
 cmake --install D:\code\gitcode\llvm-project\build-llvm --config Release
 ```
 
