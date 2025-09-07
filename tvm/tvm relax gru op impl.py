@@ -343,4 +343,11 @@ class GRU(OnnxOpConverter):
         # ONNX expects Y:[S,1,B,H], Y_h:[1,B,H] for single direction
         Y   = bb.emit(relax.op.expand_dims(Y_SBH, axis=1))
         Y_h = bb.emit(relax.op.expand_dims(Yh_BH, axis=0))
-        return [Y, Y_h]
+        # 之前（会触发你现在的错误）
+        # return [Y, Y_h]
+        # # 末尾替换为：
+        # return relax.Tuple([Y, Y_h])
+
+        # 正确（返回单个 RelaxExpr）
+        ret = bb.emit(relax.Tuple([Y, Y_h]))
+        return ret
