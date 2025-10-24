@@ -129,3 +129,16 @@ cmake --build . --config Release
 cmake --install . --config Release
 
 
+clang windows:
+cmake $root_dir\onnx-mlir -G $cmake_generator `
+	-DCMAKE_BUILD_TYPE=Release `
+	-DCMAKE_PREFIX_PATH="$root_dir\protobuf_install;$root_dir\abs_install" `
+	-Dabsl_DIR="$root_dir\abs_install\lib\cmake\absl" `
+	-DLLVM_LIT_ARGS=-v `
+	-DMLIR_DIR="$root_dir\llvm-project\build\lib\cmake\mlir" `
+	-DONNX_MLIR_ENABLE_STABLEHLO=OFF `
+	-DONNX_MLIR_ENABLE_WERROR=ON `
+	-DCMAKE_CXX_FLAGS="/D_USE_MATH_DEFINES" `
+	-DOPENMP_SOURCE_DIR="$root_dir\llvm-project\openmp"
+
+
