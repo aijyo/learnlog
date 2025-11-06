@@ -458,12 +458,12 @@ def main():
     sfix = fill_optional_inputs_for_slice(model)
     cfix = conv_fill_zero_bias(model)
     gfix = gemm_fill_zero_bias(model)
-    bfix = make_broadcast_explicit(model)
-    erep = replace_einsum_btgi_gih_to_matmul(model)
+    # bfix = make_broadcast_explicit(model)
+    # erep = replace_einsum_btgi_gih_to_matmul(model)
     dfix = freeze_dim_params(model, mapping) if mapping else 0
     afix = align_conv_input_channels(model)
 
-    print(f"[Pass stats] axes-attr→input: {a2i}, Slice fixed: {sfix}, Conv bias added: {cfix}, Gemm bias added: {gfix}, Broadcast explicit: {bfix}, Einsum replaced: {erep}, Dim frozen: {dfix}, Conv aligned: {afix}")
+    # print(f"[Pass stats] axes-attr→input: {a2i}, Slice fixed: {sfix}, Conv bias added: {cfix}, Gemm bias added: {gfix}, Broadcast explicit: {bfix}, Einsum replaced: {erep}, Dim frozen: {dfix}, Conv aligned: {afix}")
     polish_and_save(model, args.out_path)
 
 if __name__ == "__main__":
