@@ -8,20 +8,20 @@
 using namespace df;
 
 // Helper: reinterpret complex float view into real interleaved buffer [re,im] per bin
-static inline void complex_vec_to_interleaved(const std::vector<std::complex<float>>& src,
+static inline void complex_vec_to_interleaved(const std::vector<Complex32>& src,
     float* dst, size_t bins) {
     for (size_t i = 0; i < bins; ++i) {
-        dst[2 * i + 0] = src[i].real();
-        dst[2 * i + 1] = src[i].imag();
+        dst[2 * i + 0] = src[i].r;
+        dst[2 * i + 1] = src[i].i;
     }
 }
 
 static inline void interleaved_to_complex_vec(const float* src,
-    std::vector<std::complex<float>>& dst,
+    std::vector<Complex32>& dst,
     size_t bins) {
     dst.resize(bins);
     for (size_t i = 0; i < bins; ++i) {
-        dst[i] = std::complex<float>(src[2 * i + 0], src[2 * i + 1]);
+        dst[i] = Complex32(src[2 * i + 0], src[2 * i + 1]);
     }
 }
 
@@ -165,6 +165,7 @@ void DfTractCpp::df_apply(const std::deque<Tensor>& spec_x,
     // slice(.., ..nb_df) is zeroed and updated, the rest of o_f is not touched.
 }
 
+
 DfTractCpp::RawOut DfTractCpp::process_raw() {
     RawOut out;
     const size_t ch = cfg_.ch;
@@ -172,18 +173,13 @@ DfTractCpp::RawOut DfTractCpp::process_raw() {
     // 1) Feature extraction per channel from spec_buf_
     for (size_t c = 0; c < ch; ++c) {
         float* spec_ptr = spec_buf_.ptr() + c * (n_freqs_ * 2);
-        std::vector<Complex32> spec_c(n_freqs_);
-        interleaved_to_complex_vec(spec_ptr, spec_c, n_freqs_);
-
-        // ERB features into erb_buf_ at [c, 0, 0, :]
         float* erb_ptr = erb_buf_.ptr() + c * cfg_.nb_erb;
-        df_states_[c]->feat_erb(spec_c.data(), cfg_.alpha, erb_ptr);
+        df_states_[c]->feat_erb(spec_ptr, cfg_.alpha, erb_ptr);
+
 
         // Complex low-frequency features into cplx_buf_ at [c, 0, :, :]
-        std::vector<Complex32> cplx_out(cfg_.nb_df);
-        df_states_[c]->feat_cplx(spec_c.data(), cfg_.alpha, cplx_out.data());
         float* cplx_ptr = cplx_buf_.ptr() + c * (cfg_.nb_df * 2);
-        complex_vec_to_interleaved(cplx_out, cplx_ptr, cfg_.nb_df);
+        df_states_[c]->feat_cplx(spec_ptr, cfg_.alpha, cplx_ptr);
     }
 
     // 2) Build encoder inputs
@@ -304,6 +300,7 @@ DfTractCpp::RawOut DfTractCpp::process_raw() {
 
     return out;
 }
+
 float DfTractCpp::process(const float* noisy, float* enh) {
     assert(noisy && enh);
 
@@ -311,7 +308,7 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     const size_t hop = cfg_.hop_size;
 
     // 0) Frame energy and "RMS" (actually mean square, same as Rust)
-    float  max_a = 0.0f;
+    float max_a = 0.0f;
     double e = 0.0;
     for (size_t c = 0; c < ch; ++c) {
         const float* chptr = noisy + c * hop;
@@ -323,10 +320,7 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     }
     const float rms = static_cast<float>(e / static_cast<double>(ch * hop));
 
-    // --- Silence / skip counter logic (Rust-aligned) ---
-    // Rust:
-    // if rms < 1e-7 { skip_counter += 1 } else { skip_counter = 0 }
-    // if skip_counter > 5 { enh.fill(0.); return Ok(-15.); }
+    // Silence / skip counter logic (Rust-aligned)
     if (rms < 1e-7f) {
         ++skip_counter_;
     }
@@ -338,9 +332,9 @@ float DfTractCpp::process(const float* noisy, float* enh) {
         return -15.0f;
     }
 
-    // --- Clipping warning (same as Rust) ---
+    // Clipping warning (same as Rust)
     if (max_a > 0.9999f) {
-        std::cerr << "Warning: possible clipping detected: " << max_a << "\n";
+        //std::cerr << "Warning: possible clipping detected: " << max_a << "\n";
     }
 
     // 1) Update rolling buffers (drop oldest)
@@ -365,7 +359,6 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     rolling_spec_buf_x_.push_back(spec_buf_);
 
     // 3) Fast bypass when attenuation limit == 1.0 (no noise reduction)
-    // Rust: if self.atten_lim.unwrap_or_default() == 1. { enh.assign(&noisy); return Ok(35.); }
     if (cfg_.atten_lim.has_value() &&
         std::fabs(cfg_.atten_lim.value() - 1.0f) < 1e-6f) {
         std::memcpy(enh, noisy, sizeof(float) * ch * hop);
@@ -376,17 +369,12 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     RawOut raw = process_raw();  // (lsnr, gains, coefs)
 
     // 5) Decide whether to apply ERB / post stages
-    // Rust: let (apply_erb, _, _) = self.apply_stages(lsnr);
     bool apply_erb = true;
     {
         const float lsnr = raw.lsnr;
-        if(lsnr < cfg_.min_db_thresh || lsnr > cfg_.max_db_erb_thresh) {
+        if (lsnr < cfg_.min_db_thresh || lsnr > cfg_.max_db_erb_thresh) {
             apply_erb = false;
         }
-        //else
-        //{
-        //    apply_erb = true;
-        //}
     }
 
     // 6) Apply ERB gains on rolling_spec_buf_y_[df_order - 1]
@@ -403,24 +391,19 @@ float DfTractCpp::process(const float* noisy, float* enh) {
             float* gptr = gains.ptr();  // length = nb_erb
             for (size_t c = 0; c < ch; ++c) {
                 float* spec_ptr = spec_target.ptr() + c * (n_freqs_ * 2);
-                std::vector<Complex32> spec_c(n_freqs_);
-                interleaved_to_complex_vec(spec_ptr, spec_c, n_freqs_);
+
                 // Rust: self.df_states[0].apply_mask(...)
-                df_states_[0]->apply_mask(spec_c.data(), gptr);
-                complex_vec_to_interleaved(spec_c, spec_ptr, n_freqs_);
+                df_states_[0]->apply_mask(spec_ptr, gptr);  // no conversion needed
             }
         }
         else {
             // Per-channel mask (same number of channels)
             for (size_t c = 0; c < ch; ++c) {
                 float* spec_ptr = spec_target.ptr() + c * (n_freqs_ * 2);
-                std::vector<Complex32> spec_c(n_freqs_);
-                interleaved_to_complex_vec(spec_ptr, spec_c, n_freqs_);
-
                 float* gptr = gains.ptr() + c * cfg_.nb_erb;
+
                 // Rust: self.df_states[0].apply_mask(...)
-                df_states_[0]->apply_mask(spec_c.data(), gptr);
-                complex_vec_to_interleaved(spec_c, spec_ptr, n_freqs_);
+                df_states_[0]->apply_mask(spec_ptr, gptr);  // no conversion needed
             }
         }
 
@@ -434,9 +417,6 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     }
 
     // 7) Copy ERB-masked spectrum into spec_buf_ (spec_out for DF)
-    // Rust:
-    // let spec = self.rolling_spec_buf_y.get_mut(self.df_order - 1).unwrap();
-    // self.spec_buf.clone_from(spec);
     spec_buf_ = spec_target;
 
     // 8) Deep Filtering stage
@@ -450,8 +430,6 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     }
 
     // 9) Prepare spec_noisy and spec_enh for post-filter and attenuation mix
-    // Rust:
-    // idx = max(lookahead, df_order) - lookahead - 1
     size_t noisy_idx =
         (std::max(cfg_.lookahead, cfg_.df_order) - cfg_.lookahead - 1);
 
@@ -459,10 +437,6 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     Tensor& spec_enh = spec_buf_;
 
     // 10) Optional post filter
-    // Rust:
-    // if apply_erb && self.post_filter {
-    //     post_filter(spec_noisy, spec_enh, post_filter_beta);
-    // }
     if (apply_erb && cfg_.post_filter) {
         for (size_t c = 0; c < ch; ++c) {
             std::vector<Complex32> noisy_c(n_freqs_);
@@ -481,8 +455,6 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     }
 
     // 11) Limit attenuation by mixing back some of the noisy signal
-    // Rust:
-    // spec_enh *= (1. - lim); spec_enh += lim * spec_noisy;
     if (cfg_.atten_lim.has_value()) {
         const float lim = cfg_.atten_lim.value();
         const float one_minus_lim = 1.0f - lim;
@@ -496,7 +468,6 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     }
 
     // 12) Synthesis: spectrum -> time domain
-    // Rust: for (state, spec_ch, enh_ch) in izip!(...) { state.synthesis(spec_ch, enh_ch) }
     for (size_t c = 0; c < ch; ++c) {
         std::vector<Complex32> spec_c(n_freqs_);
         interleaved_to_complex_vec(spec_enh.ptr() + c * n_freqs_ * 2,
@@ -509,3 +480,4 @@ float DfTractCpp::process(const float* noisy, float* enh) {
     // Return lsnr estimated by the encoder (same as Rust)
     return raw.lsnr;
 }
+
