@@ -11,38 +11,39 @@
 #include <memory>
 
 #include "./../common_def.h"
+#include "model_shim/fft/kiss_fft_cxx.h"
 
 namespace df {
 
-    using Complex32 = std::complex<float>;
+    //using Complex32 = std::complex<float>;
 
-    // Forward declaration of pocketfft plans.
-    // You may adapt this to your concrete pocketfft API.
-    struct FftPlan {
-        std::size_t n = 0;
-        // You can store any additional fields needed by your FFT backend.
-    };
+    //// Forward declaration of pocketfft plans.
+    //// You may adapt this to your concrete pocketfft API.
+    //struct FftPlan {
+    //    std::size_t n = 0;
+    //    // You can store any additional fields needed by your FFT backend.
+    //};
 
-    // Simple wrapper for a 1D real FFT using pocketfft (or other library).
-    class RealFft {
-    public:
-        RealFft() = default;
-        RealFft(std::size_t n);
+    //// Simple wrapper for a 1D real FFT using pocketfft (or other library).
+    //class RealFft {
+    //public:
+    //    RealFft() = default;
+    //    RealFft(std::size_t n);
 
-        std::size_t size() const { return n_; }
+    //    std::size_t size() const { return n_; }
 
-        // Forward: real input -> complex spectrum (size n_/2+1)
-        void forward(const float* in, Complex32* out) const;
+    //    // Forward: real input -> complex spectrum (size n_/2+1)
+    //    void forward(const float* in, Complex32* out) const;
 
-        // Inverse: complex spectrum -> real output (size n_)
-        void inverse(const Complex32* in, float* out) const;
+    //    // Inverse: complex spectrum -> real output (size n_)
+    //    void inverse(const Complex32* in, float* out) const;
 
-    private:
-        std::size_t n_{ 0 };
-        std::size_t n_freqs_{ 0 };
-        std::shared_ptr<FftPlan> plan_fwd_;
-        std::shared_ptr<FftPlan> plan_inv_;
-    };
+    //private:
+    //    std::size_t n_{ 0 };
+    //    std::size_t n_freqs_{ 0 };
+    //    std::shared_ptr<FftPlan> plan_fwd_;
+    //    std::shared_ptr<FftPlan> plan_inv_;
+    //};
 
     // DFState replicates the behavior of the Rust DFState used in DeepFilterNet.
     class MMS_EXPORT DFState {
@@ -58,23 +59,24 @@ namespace df {
         void init_norm_states(std::size_t nb_df);
 
         // Feature extraction for ERB bands: writes nb_erb floats into out_feat
-        void feat_erb(const Complex32* spectrum,
+        void feat_erb(const float* spectrum_interleaved,
             float alpha,
             float* out_feat);
 
         // Feature extraction for complex features: outputs nb_df complex values
-        void feat_cplx(const Complex32* spectrum,
+        void feat_cplx(const float* spectrum_interleaved,
             float alpha,
-            Complex32* out_feat);
+            float* out_feat);
 
         // STFT analysis: time-domain input -> complex spectrum (size = fft_size/2+1)
-        void analysis(const float* input, Complex32* spectrum);
+        void analysis(const  float* input, Complex32* spectrum);
 
         // ISTFT synthesis: complex spectrum -> time-domain output (hop_size samples)
         void synthesis(const Complex32* spectrum, float* output);
 
         // Apply ERB mask m (size nb_erb) to the complex spectrum in-place
-        void apply_mask(Complex32* spectrum, const float* m);
+        //void apply_mask(Complex32* spectrum, const float* m);
+        void apply_mask(float* spectrum_interleaved, const float* m);
 
         // Post filter as in DeepFilterNet: noisy + enhanced spectra, band-wise attenuation
         void post_filter(const std::vector<Complex32>& noisy,
@@ -87,6 +89,10 @@ namespace df {
         std::size_t nb_erb() const { return nb_erb_; }
 
     private:
+        void compute_band_corr(float* out_feat, const float* spectrum_interleaved);
+        void log_transform(float* out_feat);
+        void band_mean_norm_erb(float* out_feat, float alpha);
+
         // Internal helpers
         static float freq2erb(float freq_hz);
         static float erb2freq(float n_erb);
@@ -128,7 +134,9 @@ namespace df {
         std::vector<float> unit_norm_state_; // per DF band
 
         // FFT engine
-        RealFft fft_;
+        //RealFft fft_;
+        x_fft::KissFFT fft_forward_;
+        x_fft::KissFFT fft_inverse_;
         std::vector<float> time_buf_;
         std::vector<Complex32> freq_buf_;
     };
