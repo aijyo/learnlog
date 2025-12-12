@@ -15,10 +15,10 @@
 #include "df_state.h"
 #include "model_runner.h" // Your ONNX-MLIR runner wrapper
 #include "df_config_loader.h"
+
+//using Complex32 = std::complex<float>;
+
 namespace df {
-
-    using Complex32 = std::complex<float>;
-
     class MMS_EXPORT DfTractCpp {
     public:
         struct RawOut {
