@@ -81,3 +81,23 @@ void Bernoulli(const InT* input_prob,
         }
     }
 }
+
+#include <iostream>
+
+int main() {
+    std::vector<int64_t> shape = {2, 3};
+    float probs[] = {0.1f, 0.5f, 0.9f,
+                     1.2f, -0.2f, 0.7f};
+
+    std::vector<int64_t> out(6);
+
+    // Deterministic run with seed
+    Bernoulli<float, int64_t>(probs, out.data(), shape,
+                              /*clamp_prob=*/true,
+                              /*nan_to_zero=*/true,
+                              /*seed=*/12345ULL);
+
+    for (auto v : out) std::cout << v << " ";
+    std::cout << "\n";
+    return 0;
+}
