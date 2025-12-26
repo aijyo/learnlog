@@ -1,228 +1,192 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <cassert>
+#include <limits>
 #include <algorithm>
 #include <numeric>
+#include <stdexcept>
 
-// Tensor class to represent the tensor structure
-class Tensor {
-public:
-    Tensor(std::vector<int64_t> shape, std::vector<float> values)
-        : shape_(shape), values_(values) {
+struct Tensor {
+    std::vector<int64_t> shape;
+    std::vector<float> data; // row-major
+    int64_t rank() const { return static_cast<int64_t>(shape.size()); }
+
+    int64_t numel() const {
+        int64_t n = 1;
+        for (int64_t dim : shape) n *= dim;
+        return n;
     }
 
-    const std::vector<int64_t>& getShape() const { return shape_; }
-    const std::vector<float>& getValues() const { return values_; }
-    size_t getSize() const { return values_.size(); }
-
-    // Print tensor details
-    void print() const {
-        std::cout << "Tensor Shape: [";
-        for (size_t i = 0; i < shape_.size(); ++i) {
-            std::cout << shape_[i];
-            if (i != shape_.size() - 1) std::cout << ", ";
-        }
-        std::cout << "]\nValues: [";
-        for (size_t i = 0; i < values_.size(); ++i) {
-            std::cout << values_[i];
-            if (i != values_.size() - 1) std::cout << ", ";
-        }
-        std::cout << "]\n";
-    }
-
-private:
-    std::vector<int64_t> shape_;
-    std::vector<float> values_;
+    const float* data_ptr() const { return data.data(); }
+    float* data_ptr() { return data.data(); }
 };
 
-// Helper to handle reduction
-template <typename OP_TYPE>
-class ONNXReductionOpShapeHelper {
-public:
-    ONNXReductionOpShapeHelper(Tensor& data, std::vector<int64_t>& axes, bool keepDims)
-        : data_(data), axes_(axes), keepDims_(keepDims) {
+enum class ReduceOpType {
+    Sum,
+    Mean,
+    Max,
+    Min,
+    Prod,
+    L1,
+    L2,
+    LogSum,
+    LogSumExp,
+    SumSquare
+};
+
+// Initialize the accumulator based on the operation type
+static float InitValue(ReduceOpType op) {
+    switch (op) {
+    case ReduceOpType::Sum: return 0.0f;
+    case ReduceOpType::Prod: return 1.0f;
+    case ReduceOpType::Max: return -std::numeric_limits<float>::infinity();
+    case ReduceOpType::Min: return std::numeric_limits<float>::infinity();
+    default: return 0.0f;
+    }
+}
+
+// Update the accumulator based on the operation type
+static float ReduceUpdate(float acc, float x, ReduceOpType op) {
+    switch (op) {
+    case ReduceOpType::Sum: return acc + x;
+    case ReduceOpType::Prod: return acc * x;
+    case ReduceOpType::Max: return std::max(acc, x);
+    case ReduceOpType::Min: return std::min(acc, x);
+    default: return acc;
+    }
+}
+
+// Finalize the accumulator, performing operations like mean or square root
+static float ReduceFinalize(float acc, int64_t reduce_count, ReduceOpType op) {
+    if (op == ReduceOpType::Mean) {
+        return acc / static_cast<float>(reduce_count);
+    }
+    return acc;
+}
+
+static int64_t getLinearIndex(const std::vector<int64_t>& out_multi, const std::vector<int64_t>& strides) {
+    int64_t out_index = 0;
+    int64_t rank = out_multi.size();
+
+    // Calculate the linear index by summing the product of each dimension's index and its stride
+    for (int64_t i = 0; i < rank; ++i) {
+        out_index += out_multi[i] * strides[i];
     }
 
-    // Custom shape computation
-    void customComputeShape() {
-        int64_t rank = data_.getShape().size();
-        std::vector<int64_t> uniqueAxes;
+    return out_index;
+}
 
-        // Normalize axes (to handle negative indices)
-        for (int64_t axis : axes_) {
-            if (axis < -rank || axis >= rank) {
-                std::cerr << "Error: reduction axis is out of bound" << std::endl;
-                exit(1);
-            }
-            axis = axis >= 0 ? axis : (rank + axis);
-            if (std::find(uniqueAxes.begin(), uniqueAxes.end(), axis) == uniqueAxes.end()) {
-                uniqueAxes.push_back(axis);
-            }
+// Main reduction function that performs the specified reduction operation
+static Tensor ReduceONNX(const Tensor& input, std::vector<int64_t> axes, bool keepdims, ReduceOpType op) {
+    const int64_t rank = input.rank();
+    std::vector<char> reduce_flag(rank, 0);
+
+    // Mark the reduced axes
+    for (int64_t ax : axes) reduce_flag[ax] = 1;
+
+    // Calculate the output shape
+    std::vector<int64_t> out_shape;
+    for (int64_t i = 0; i < rank; ++i) {
+        if (reduce_flag[i] && keepdims) {
+            out_shape.push_back(1);  // Keep the dimension with size 1 if keepdims is true
         }
-
-        // Mark reduction axes
-        isReductionAxis_.resize(rank, false);
-        for (int64_t axis : uniqueAxes) {
-            isReductionAxis_[axis] = true;
+        else if (!reduce_flag[i]) {
+            out_shape.push_back(input.shape[i]);  // Retain non-reduced dimensions
         }
+    }
 
-        // Generate output dimensions
-        std::vector<int64_t> outputDims;
+    // Initialize the output tensor
+    Tensor output;
+    output.shape = out_shape;
+    output.data.resize(output.numel(), 0.0f);
+
+    // Calculate reduce_count (number of elements in the reduced dimensions)
+    int64_t reduce_count = 1;
+    for (int64_t ax : axes) {
+        reduce_count *= input.shape[ax];
+    }
+
+    // Calculate strides for each dimension in reverse order
+    std::vector<int64_t> strides(rank, 1);  // Initialize strides
+    for (int64_t i = rank - 2; i >= 0; --i) {
+        strides[i] = strides[i + 1] * input.shape[i + 1];  // Calculate stride based on the next dimension
+    }
+
+    std::vector<int64_t> out_strides(out_shape.size(), 1);  // Initialize strides
+    for (int64_t i = out_shape.size() - 2; i >= 0; --i) {
+        out_strides[i] = out_strides[i + 1] * output.shape[i + 1];  // Calculate stride based on the next dimension
+    }
+
+    // Iterate through the input tensor and perform the reduction operation
+    for (int64_t in_linear = 0; in_linear < input.numel(); ++in_linear) {
+        // Convert the input linear index to input multi-dimensional coordinates
+        std::vector<int64_t> in_multi(rank, 0);
+        int64_t tmp = in_linear;
         for (int64_t i = 0; i < rank; ++i) {
-            if (isReductionAxis_[i]) {
-                outputDims.push_back(keepDims_ ? 1 : 0);  // Keep the dimension or remove it
+            in_multi[i] = tmp / strides[i];  // Calculate the multi-dimensional index
+            tmp -= in_multi[i] * strides[i];  // Update tmp for the next dimension
+        }
+
+        // For each output element, determine its corresponding multi-index in the input
+        std::vector<int64_t> out_multi(in_multi);
+        if (keepdims) {
+            // If keepdims is true, set the reduced dimensions' coordinates to 0
+            for (int64_t ax : axes) {
+                out_multi[ax] = 0;
             }
-            else {
-                outputDims.push_back(data_.getShape()[i]);
+        }
+        else {
+            // If keepdims is false, remove the reduced dimensions
+            for (auto i = 0; i < axes.size(); ++i) {
+                out_multi.erase(out_multi.begin() + axes[i] - i);
             }
         }
 
-        // Output result
-        outputDims_ = outputDims;
+        auto out_linear = getLinearIndex(out_multi, out_strides);
+        output.data[out_linear] = ReduceUpdate(output.data[out_linear], input.data[out_linear], op);
+
     }
 
-    // Get the output dimensions
-    const std::vector<int64_t>& getOutputDims() const {
-        return outputDims_;
+    return output;
+}
+
+// Print the tensor's shape and data
+static void PrintTensor(const Tensor& t, const std::string& name) {
+    std::cout << name << " shape=[";
+    for (size_t i = 0; i < t.shape.size(); ++i) {
+        std::cout << t.shape[i] << (i + 1 == t.shape.size() ? "" : ", ");
     }
-
-private:
-    Tensor& data_;
-    std::vector<int64_t>& axes_;
-    bool keepDims_;
-    std::vector<bool> isReductionAxis_;
-    std::vector<int64_t> outputDims_;
-};
-
-// Generic Reduction Operation (e.g., ReduceSum)
-class ONNXReduceOp {
-public:
-    ONNXReduceOp(Tensor& data, std::vector<int64_t>& axes, bool keepDims, std::string opType)
-        : data_(data), axes_(axes), keepDims_(keepDims), opType_(opType) {
+    std::cout << "] data={";
+    for (size_t i = 0; i < t.data.size(); ++i) {
+        std::cout << t.data[i] << (i + 1 == t.data.size() ? "" : ", ");
     }
-
-    // Compute the shape for Reduce operation and perform the actual reduction
-    void computeShape() {
-        std::cout << "Input Tensor:\n";
-        data_.print();
-
-        ONNXReductionOpShapeHelper<ONNXReduceOp> shapeHelper(data_, axes_, keepDims_);
-        shapeHelper.customComputeShape();
-
-        // Perform the actual reduction operation
-        performReduction();
-
-        outputDims_ = shapeHelper.getOutputDims();
-    }
-
-    // Get the output dimensions of the operation
-    const std::vector<int64_t>& getOutputDims() const {
-        return outputDims_;
-    }
-
-    // Print the output dimensions
-    void printOutputDims() const {
-        std::cout << "Output Tensor Shape: [";
-        for (size_t i = 0; i < outputDims_.size(); ++i) {
-            std::cout << outputDims_[i];
-            if (i != outputDims_.size() - 1) std::cout << ", ";
-        }
-        std::cout << "]\n";
-    }
-
-    // Print the output tensor values (after reduction)
-    void printOutputValues() const {
-        std::cout << "Output Tensor Values: [";
-        for (size_t i = 0; i < outputValues_.size(); ++i) {
-            std::cout << outputValues_[i];
-            if (i != outputValues_.size() - 1) std::cout << ", ";
-        }
-        std::cout << "]\n";
-    }
-
-private:
-    Tensor& data_;
-    std::vector<int64_t>& axes_;
-    bool keepDims_;
-    std::vector<int64_t> outputDims_;
-    std::vector<float> outputValues_;
-    std::string opType_; // "sum", "mean", "max", etc.
-
-    // Perform actual reduction based on operation type
-    void performReduction() {
-        std::vector<float> inputValues = data_.getValues();
-        std::vector<int64_t> shape = data_.getShape();
-        int64_t rows = shape[0];
-        int64_t cols = shape[1];
-
-        if (opType_ == "sum") {
-            // Perform sum along axis 0 (reduce by rows)
-            if (axes_[0] == 0) {
-                for (int64_t col = 0; col < cols; ++col) {
-                    float sum = 0.0;
-                    for (int64_t row = 0; row < rows; ++row) {
-                        sum += inputValues[row * cols + col];
-                    }
-                    outputValues_.push_back(sum);
-                }
-            }
-            // Perform sum along axis 1 (reduce by columns)
-            else if (axes_[0] == 1) {
-                for (int64_t row = 0; row < rows; ++row) {
-                    float sum = 0.0;
-                    for (int64_t col = 0; col < cols; ++col) {
-                        sum += inputValues[row * cols + col];
-                    }
-                    outputValues_.push_back(sum);
-                }
-            }
-        }
-        else if (opType_ == "mean") {
-            // Perform mean along axis 0 (reduce by rows)
-            if (axes_[0] == 0) {
-                for (int64_t col = 0; col < cols; ++col) {
-                    float sum = 0.0;
-                    for (int64_t row = 0; row < rows; ++row) {
-                        sum += inputValues[row * cols + col];
-                    }
-                    outputValues_.push_back(sum / rows);  // Mean
-                }
-            }
-            // Perform mean along axis 1 (reduce by columns)
-            else if (axes_[0] == 1) {
-                for (int64_t row = 0; row < rows; ++row) {
-                    float sum = 0.0;
-                    for (int64_t col = 0; col < cols; ++col) {
-                        sum += inputValues[row * cols + col];
-                    }
-                    outputValues_.push_back(sum / cols);  // Mean
-                }
-            }
-        }
-        // Other operations (like max, min) can be added similarly
-    }
-};
+    std::cout << "}\n";
+}
 
 int main() {
-    // Define a tensor with shape (3, 4) and some values
-    std::vector<int64_t> shape = { 3, 4 };
-    std::vector<float> values = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f };
-    Tensor data(shape, values);
+    // Example: Input tensor shape = [2, 3, 4] and output shape = [1, 3, 4]
+    Tensor x;
+    x.shape = { 2, 3, 4 };
+    x.data = { 1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,
+              13, 14, 15, 16,  17, 18, 19, 20,  21, 22, 23, 24 };
 
-    // Define axes to reduce along (e.g., reduce along axis 1)
-    std::vector<int64_t> axes = { 0 };
+    // Test ReduceSum over axis=0, keepdims=1 => shape (1, 3, 4)
+    {
+        Tensor y = ReduceONNX(x, { 0 }, true, ReduceOpType::Sum);
+        PrintTensor(y, "ReduceSum(axis=0, keepdims=1)");
+    }
 
-    // Set keepDims to true (keep the reduced dimensions)
-    bool keepDims = true;
+    // Test ReduceSum over axis=1, keepdims=0 => shape (2, 1, 4)
+    {
+        Tensor y = ReduceONNX(x, { 1 }, false, ReduceOpType::Sum);
+        PrintTensor(y, "ReduceSum(axis=1, keepdims=0)");
+    }
 
-    // Create and compute shape for ReduceSum operation
-    ONNXReduceOp reduceSumOp(data, axes, keepDims, "sum");
-    reduceSumOp.computeShape();
-
-    // Print the output dimensions and values
-    reduceSumOp.printOutputDims();
-    reduceSumOp.printOutputValues();
+    // Test ReduceSum over axis=2, keepdims=0 => shape (2, 3, 1)
+    {
+        Tensor y = ReduceONNX(x, { 2 }, false, ReduceOpType::Sum);
+        PrintTensor(y, "ReduceSum(axis=2, keepdims=0)");
+    }
 
     return 0;
 }
