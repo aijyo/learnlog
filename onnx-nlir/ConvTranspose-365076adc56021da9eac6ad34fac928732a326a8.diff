@@ -1,0 +1,184 @@
+diff --cc src/Runtime/omp/CMakeLists.txt
+index e3850727,13a46519..00000000
+--- a/src/Runtime/omp/CMakeLists.txt
++++ b/src/Runtime/omp/CMakeLists.txt
+@@@ -3,27 -3,63 +3,75 @@@
+  if(OMP_SUPPORTED)
+    set(OMP_TOPDIR ${CMAKE_CURRENT_BINARY_DIR})
+    set_directory_properties(PROPERTIES EP_BASE ${OMP_TOPDIR})
+-   set(OPENMP_SOURCE_DIR ${LLVM_BUILD_MAIN_SRC_DIR}/../openmp)
++ 
++   # Allow OPENMP_SOURCE_DIR to be overridden from the top-level CMake configure.
++   # Fallback to llvm-project/openmp if not given.
++   if(NOT DEFINED OPENMP_SOURCE_DIR)
++     set(OPENMP_SOURCE_DIR ${LLVM_BUILD_MAIN_SRC_DIR}/../openmp)
++   endif()
+  
+    include(ExternalProject)
++ 
++   # ---------------------------------------------------------------------------
++   # Generator and build type
++   # Reuse the top-level generator when invoking the external project.
++   # ---------------------------------------------------------------------------
++   set(_EP_GENERATOR ${CMAKE_GENERATOR})
++   if(NOT _EP_GENERATOR)
++     set(_EP_GENERATOR "Ninja")
++   endif()
++ 
++   # ---------------------------------------------------------------------------
++   # Library names and whether OpenMP must be shared on this platform
++   # ---------------------------------------------------------------------------
++   if(WIN32)
++     # Windows cannot build static libomp; enforce shared.
++     set(_LIBOMP_ENABLE_SHARED ON)
++     set(_OMP_LIB_NAME libomp.lib)   # Import/implib
++     set(_OMP_DLL_NAME libomp.dll)   # Runtime DLL
++     set(_OMPRUNTIME_OUT ${ONNX_MLIR_LIBRARY_PATH}/libompruntime.lib)
++   else()
++     # Non-Windows: keep static to embed into model.so
++     set(_LIBOMP_ENABLE_SHARED OFF)
++     set(_OMP_LIB_NAME libomp.a)
++     set(_OMPRUNTIME_OUT ${ONNX_MLIR_LIBRARY_PATH}/libompruntime.a)
++   endif()
++ 
++   # ---------------------------------------------------------------------------
++   # ExternalProject: configure & build OpenMP without using 'sh -c'
++   # ---------------------------------------------------------------------------
+    ExternalProject_Add(OMomp
+-     DOWNLOAD_DIR "."
+-     BINARY_DIR ${OMP_TOPDIR}/openmp-build
+-     INSTALL_DIR ${OMP_TOPDIR}/install
+-     STAMP_DIR ${OMP_TOPDIR}/stamp
+-     TMP_DIR ${OMP_TOPDIR}/tmp
+- 
+-     DOWNLOAD_COMMAND ""
+-     # Build with LIBOMP_ENABLE_SHARED=OFF so that libomp.a can be embedded into model.so
+-     # Since OpenMP is not exposed in the LLVM build directory, it must be configured
+-     # and built separately in its own build directory
+-     CONFIGURE_COMMAND sh -c "CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} \
+-                              cmake -G Ninja -S ${OPENMP_SOURCE_DIR} \
+-                                 -B ${OMP_TOPDIR}/openmp-build \
+-                                 -DCMAKE_BUILD_TYPE=Release \
+-                                 -DLIBOMP_ENABLE_SHARED=OFF"
+- 
+-     BUILD_COMMAND sh -c "cmake --build ${OMP_TOPDIR}/openmp-build --target omp"
++     SOURCE_DIR    ${OPENMP_SOURCE_DIR}
++     BINARY_DIR    ${OMP_TOPDIR}/openmp-build
++     INSTALL_DIR   ${OMP_TOPDIR}/install
++     STAMP_DIR     ${OMP_TOPDIR}/stamp
++     TMP_DIR       ${OMP_TOPDIR}/tmp
++     DOWNLOAD_COMMAND ""                    # Use local source tree
++ 
+++# <<<<<<< Updated upstream
+++    # DOWNLOAD_COMMAND ""
+++    # # Build with LIBOMP_ENABLE_SHARED=OFF so that libomp.a can be embedded into model.so
+++    # # Since OpenMP is not exposed in the LLVM build directory, it must be configured
+++    # # and built separately in its own build directory
+++    # CONFIGURE_COMMAND sh -c "CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} \
+++                             # cmake -G Ninja -S ${OPENMP_SOURCE_DIR} \
+++                                # -B ${OMP_TOPDIR}/openmp-build \
+++                                # -DCMAKE_BUILD_TYPE=Release \
+++                                # -DLIBOMP_ENABLE_SHARED=OFF"
+++# =======
++     # Use the same generator as the main build.
++     CMAKE_GENERATOR ${_EP_GENERATOR}
+++# >>>>>>> Stashed changes
++ 
++     # Pass compilers and options explicitly.
++     CMAKE_ARGS
++       -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
++       -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
++       -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
++       -DLIBOMP_ENABLE_SHARED=${_LIBOMP_ENABLE_SHARED}
++ 
++     # Build the 'omp' target from the OpenMP project.
++     BUILD_COMMAND ${CMAKE_COMMAND} --build ${OMP_TOPDIR}/openmp-build --target omp
+      INSTALL_COMMAND ""
+    )
+  
+diff --cc src/Runtime/python/CMakeLists.txt
+index 3153c722,0269bcbc..00000000
+--- a/src/Runtime/python/CMakeLists.txt
++++ b/src/Runtime/python/CMakeLists.txt
+@@@ -111,26 -88,49 +88,61 @@@ install(TARGETS PyRuntimeC DESTINATION 
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/libs)
+  
+  add_custom_target(OMCreatePyRuntimePackage
+-         COMMAND cp -r ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlir ${CMAKE_CURRENT_BINARY_DIR}
+-         COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirdocker.py ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/
+-         COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/PyRuntime.py ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir
+-         COMMAND cp ${ONNX_MLIR_BIN_ROOT}/${CMAKE_BUILD_TYPE}/lib/PyRuntimeC.*.so ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/libs
+-         DEPENDS PyRuntimeC
+-      )
+- 
+- # Target to prepare onnxmlirtorch package
+- file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch/libs)
++   # Copy package skeleton
++   COMMAND ${CMAKE_COMMAND} -E copy_directory
++           ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlir
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir
++   # Copy helper scripts
++   COMMAND ${CMAKE_COMMAND} -E copy_if_different
++           ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirdocker.py
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/
++   COMMAND ${CMAKE_COMMAND} -E copy_if_different
++           ${CMAKE_CURRENT_SOURCE_DIR}/PyRuntime.py
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/
++   # Ensure libs dir exists
++   COMMAND ${CMAKE_COMMAND} -E make_directory
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/libs
++   # Copy the built extension (handles .pyd/.so transparently)
++   COMMAND ${CMAKE_COMMAND} -E copy_if_different
++           $<TARGET_FILE:PyRuntimeC>
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlir/src/onnxmlir/libs/
++   DEPENDS PyRuntimeC
++ )
++ 
+++# <<<<<<< Updated upstream
+++# # Target to prepare onnxmlirtorch package
+++# file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch/libs)
+++# add_custom_target(OMCreateONNXMLIRTorchPackage
+++        # COMMAND cp -r ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirtorch ${CMAKE_CURRENT_BINARY_DIR}
+++        # COMMAND cp ${ONNX_MLIR_BIN_ROOT}/${CMAKE_BUILD_TYPE}/lib/PyRuntimeC.*.so ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch/libs
+++        # COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirdocker.py ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch
+++        # COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/PyRuntime.py ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch
+++        # DEPENDS PyRuntimeC
+++     # )
+++# =======
+  add_custom_target(OMCreateONNXMLIRTorchPackage
+-         COMMAND cp -r ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirtorch ${CMAKE_CURRENT_BINARY_DIR}
+-         COMMAND cp ${ONNX_MLIR_BIN_ROOT}/${CMAKE_BUILD_TYPE}/lib/PyRuntimeC.*.so ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch/libs
+-         COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirdocker.py ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch
+-         COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/PyRuntime.py ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch
+-         DEPENDS PyRuntimeC
+-      )
+- 
++   COMMAND ${CMAKE_COMMAND} -E copy_directory
++           ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirtorch
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch
++   COMMAND ${CMAKE_COMMAND} -E copy_if_different
++           $<TARGET_FILE:PyRuntimeC>
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch/
++   COMMAND ${CMAKE_COMMAND} -E copy_if_different
++           ${CMAKE_CURRENT_SOURCE_DIR}/onnxmlirdocker.py
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch
++   COMMAND ${CMAKE_COMMAND} -E copy_if_different
++           ${CMAKE_CURRENT_SOURCE_DIR}/PyRuntime.py
++           ${CMAKE_CURRENT_BINARY_DIR}/onnxmlirtorch/src/onnxmlirtorch
++   DEPENDS PyRuntimeC
++ )
+++# >>>>>>> Stashed changes
++ 
++ # -----------------------------------------------------------------------------
++ # PyCompileAndRuntimeC (full compiler+runtime) 鈥?skipped for PYRUNTIME_LIGHT
++ # -----------------------------------------------------------------------------
+  if(ONNX_MLIR_ENABLE_PYRUNTIME_LIGHT)
+    # Since the compiler is not built when PYRUNTIME_LIGHT is enabled,
+-   # PyCompileAndRuntime can not be simply built.
++   # PyCompileAndRuntime cannot be built.
+    return()
+  endif()
+  
+diff --git a/ConvTranspose.diff b/ConvTranspose.diff
+index fdfff96e..88362a71 100644
+Binary files a/ConvTranspose.diff and b/ConvTranspose.diff differ
