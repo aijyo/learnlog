@@ -139,10 +139,19 @@ static void ClampRoi(RECT& r, int w, int h)
 // -----------------------------
 // ScreenRegionSelector: overlay window with red rectangle
 // Returns RECT in virtual screen coordinates.
+// Adds: max selection size + right-click reset
 // -----------------------------
 class ScreenRegionSelector
 {
 public:
+    // maxW/maxH: 0 means unlimited.
+    explicit ScreenRegionSelector(int maxW = 0, int maxH = 0)
+        : maxW_(maxW), maxH_(maxH)
+    {
+        if (maxW_ < 0) maxW_ = 0;
+        if (maxH_ < 0) maxH_ = 0;
+    }
+
     bool SelectRegionVirtual(RECT& outVirtualRect)
     {
         outVirtualRect = { 0, 0, 0, 0 };
@@ -150,7 +159,6 @@ public:
         HINSTANCE hInst = GetModuleHandleW(nullptr);
         RegisterClassOnce(hInst);
 
-        // Virtual screen geometry (multi-monitor, may be negative origin)
         vx_ = GetSystemMetrics(SM_XVIRTUALSCREEN);
         vy_ = GetSystemMetrics(SM_YVIRTUALSCREEN);
         vw_ = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -159,6 +167,8 @@ public:
         canceled_ = false;
         done_ = false;
         dragging_ = false;
+        has_selection_ = false;
+
         anchor_screen_ = { 0, 0 };
         cur_screen_ = { 0, 0 };
         sel_virtual_ = { 0, 0, 0, 0 };
@@ -174,14 +184,12 @@ public:
         if (!hwnd_)
             return false;
 
-        // Semi-transparent overlay
         SetLayeredWindowAttributes(hwnd_, 0, (BYTE)80, LWA_ALPHA);
 
         ShowWindow(hwnd_, SW_SHOW);
         UpdateWindow(hwnd_);
         SetCursor(LoadCursorW(nullptr, IDC_CROSS));
 
-        // Capture mouse so we keep receiving input while dragging
         SetCapture(hwnd_);
 
         MSG msg;
@@ -211,22 +219,24 @@ public:
     }
 
 private:
-    static inline const wchar_t* kClassName = L"RegionSelectorOverlayClass_V2";
+    static inline const wchar_t* kClassName = L"RegionSelectorOverlayClass_V3";
 
     HWND hwnd_ = nullptr;
 
-    // Virtual screen bounds
     int vx_ = 0, vy_ = 0, vw_ = 0, vh_ = 0;
+
+    int maxW_ = 0;
+    int maxH_ = 0;
 
     bool canceled_ = false;
     bool done_ = false;
     bool dragging_ = false;
 
-    // Points in virtual-screen coordinates
+    // Whether we currently have a valid selection (user released left button at least once)
+    bool has_selection_ = false;
+
     POINT anchor_screen_{};
     POINT cur_screen_{};
-
-    // Selection rect in virtual-screen coordinates
     RECT sel_virtual_{};
 
     static void NormalizeRect(RECT& r)
@@ -235,8 +245,36 @@ private:
         if (r.top > r.bottom) std::swap(r.top, r.bottom);
     }
 
-    // Convert a point from virtual-screen coords to overlay client coords
-    // Overlay window is positioned at (vx_, vy_) in virtual space.
+    static int ClampInt(int v, int lo, int hi)
+    {
+        if (v < lo) return lo;
+        if (v > hi) return hi;
+        return v;
+    }
+
+    POINT ClampCursorToMaxBox(const POINT& anchor, const POINT& cursor) const
+    {
+        POINT out = cursor;
+
+        if (maxW_ > 0)
+        {
+            if (cursor.x >= anchor.x)
+                out.x = ClampInt(cursor.x, anchor.x, anchor.x + maxW_);
+            else
+                out.x = ClampInt(cursor.x, anchor.x - maxW_, anchor.x);
+        }
+
+        if (maxH_ > 0)
+        {
+            if (cursor.y >= anchor.y)
+                out.y = ClampInt(cursor.y, anchor.y, anchor.y + maxH_);
+            else
+                out.y = ClampInt(cursor.y, anchor.y - maxH_, anchor.y);
+        }
+
+        return out;
+    }
+
     POINT ScreenToOverlayClient(const POINT& p_screen) const
     {
         POINT p = p_screen;
@@ -284,15 +322,33 @@ private:
         return self->WndProc(hwnd, msg, wParam, lParam);
     }
 
+    void ClearSelection()
+    {
+        // Clear current selection and wait for a new left-button down.
+        has_selection_ = false;
+        dragging_ = false;
+        sel_virtual_ = { 0, 0, 0, 0 };
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
     void UpdateSelectionFromCursor()
     {
-        // GetCursorPos returns virtual-screen coordinates (can be negative).
-        GetCursorPos(&cur_screen_);
+        POINT raw{};
+        GetCursorPos(&raw);
+
+        cur_screen_ = ClampCursorToMaxBox(anchor_screen_, raw);
 
         sel_virtual_.left = anchor_screen_.x;
         sel_virtual_.top = anchor_screen_.y;
         sel_virtual_.right = cur_screen_.x;
         sel_virtual_.bottom = cur_screen_.y;
+    }
+
+    bool HasValidSelection() const
+    {
+        RECT v = sel_virtual_;
+        NormalizeRect(v);
+        return (v.right > v.left) && (v.bottom > v.top);
     }
 
     LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -304,25 +360,38 @@ private:
             return TRUE;
 
         case WM_KEYDOWN:
+        {
             if (wParam == VK_ESCAPE)
             {
                 canceled_ = true;
                 done_ = true;
                 PostQuitMessage(0);
+                return 0;
+            }
+            if (wParam == VK_RETURN)
+            {
+                // Confirm only when we have a valid selection.
+                if (has_selection_ && HasValidSelection())
+                {
+                    done_ = true;
+                    PostQuitMessage(0);
+                }
+                return 0;
             }
             return 0;
+        }
 
         case WM_RBUTTONDOWN:
-            canceled_ = true;
-            done_ = true;
-            PostQuitMessage(0);
+        {
+            // Right-click means "not ok, reselect" (do NOT exit).
+            ClearSelection();
             return 0;
+        }
 
         case WM_LBUTTONDOWN:
         {
             dragging_ = true;
 
-            // Use screen coordinates directly to avoid DPI virtualization issues.
             GetCursorPos(&anchor_screen_);
             cur_screen_ = anchor_screen_;
 
@@ -349,8 +418,10 @@ private:
                 dragging_ = false;
                 UpdateSelectionFromCursor();
 
-                done_ = true;
-                PostQuitMessage(0);
+                // Mark we have a selection, but do NOT finish.
+                has_selection_ = HasValidSelection();
+
+                InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
         }
@@ -364,16 +435,13 @@ private:
             GetClientRect(hwnd, &client);
             FillRect(hdc, &client, (HBRUSH)GetStockObject(BLACK_BRUSH));
 
-            // Draw selection rectangle (convert virtual-screen rect to overlay client rect)
             RECT v = sel_virtual_;
             NormalizeRect(v);
 
             if ((v.right > v.left) && (v.bottom > v.top))
             {
-                POINT tl_screen{ v.left, v.top };
-                POINT br_screen{ v.right, v.bottom };
-                POINT tl = ScreenToOverlayClient(tl_screen);
-                POINT br = ScreenToOverlayClient(br_screen);
+                POINT tl = ScreenToOverlayClient(POINT{ v.left, v.top });
+                POINT br = ScreenToOverlayClient(POINT{ v.right, v.bottom });
 
                 RECT r_client{ tl.x, tl.y, br.x, br.y };
                 NormalizeRect(r_client);
@@ -760,7 +828,7 @@ int main()
     //DumpAllMonitors(); 
     //SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // 1) Select region in virtual-screen coordinates
-    ScreenRegionSelector selector;
+    ScreenRegionSelector selector(64,64);
     RECT rcVirtual{};
     if (!selector.SelectRegionVirtual(rcVirtual))
     {
