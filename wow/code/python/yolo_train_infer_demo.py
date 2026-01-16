@@ -91,7 +91,7 @@ def draw_detections(
     img_bgr: np.ndarray,
     dets: List[Tuple[float, float, float, float, float, int]],
     class_names: Optional[dict] = None,
-    conf_thres: float = 0.25
+    conf_thres: float = 0.05
 ) -> np.ndarray:
     """
     Draw detections on image.
@@ -123,7 +123,15 @@ def yolo_predict(model: YOLO, img_bgr: np.ndarray) -> List[Tuple[float, float, f
     """
     # Ultralytics accepts numpy arrays; it assumes BGR or RGB both work in most cases,
     # but we keep BGR and let it handle.
-    results = model.predict(source=img_bgr, verbose=False)
+    # results = model.predict(source=img_bgr, verbose=False)
+    results = model.predict(
+        source=img_bgr,
+        imgsz=128,      # 下面第2点解释
+        conf=0.01,
+        iou=0.7,
+        verbose=False
+    )
+
     r = results[0]
 
     dets = []
@@ -284,7 +292,7 @@ def build_argparser():
     pt.add_argument("--data", type=str, default=DEFAULT_DATA_YAML, help="Path to data.yaml from generated dataset")
     pt.add_argument("--model", type=str, default="yolov8n.pt", help="Base model (yolov8n.pt/yolov8s.pt...)")
     pt.add_argument("--epochs", type=int, default=50)
-    pt.add_argument("--imgsz", type=int, default=110)
+    pt.add_argument("--imgsz", type=int, default=100)
     pt.add_argument("--batch", type=int, default=64)
     pt.add_argument("--device", type=str, default="", help="'' for auto, or '0', 'cpu'")
     pt.add_argument("--project", type=str, default="skillbox",help="Ultralytics project directory")
@@ -309,23 +317,23 @@ def build_argparser():
 
     # infer
     pi = sub.add_parser("infer")
-    pi.add_argument("--weights", type=str, default=r"skillbox\train_wow_icon_box\weights\best.pt", help="best.pt path")
+    pi.add_argument("--weights", type=str, default=r"D:\code\mycode\python\mnv3\skillbox\train_wow_icon_box3\weights\best.pt", help="best.pt path")
     pi.add_argument("--source", type=str, required=True, help="Input image path")
     pi.add_argument("--save", type=str, default="annotated.png", help="Output annotated image path")
-    pi.add_argument("--conf", type=float, default=0.25)
+    pi.add_argument("--conf", type=float, default=0.05)
 
     # demo
     pd = sub.add_parser("demo")
-    pd.add_argument("--weights", type=str, default=r"skillbox\train_wow_icon_box\weights\best.pt", help="best.pt path")
+    pd.add_argument("--weights", type=str, default=r"D:\code\mycode\python\mnv3\skillbox\train_wow_icon_box3\weights\best.pt", help="best.pt path")
     pd.add_argument("--crop", type=int, default=100, help="Crop size (square)")
     pd.add_argument("--out", type=str, default="demo_annotated.png")
-    pd.add_argument("--conf", type=float, default=0.25)
+    pd.add_argument("--conf", type=float, default=0.05)
     pd.add_argument("--delay", type=float, default=5, help="Delay after click before capture")
     pd.add_argument("--monitor", type=int, default=1, help="mss monitor index (1=primary)")
 
     return p
 
-def ensure_default_subcommand(argv, subcommands, default="train"):
+def ensure_default_subcommand(argv, subcommands, default="demo"):
     """
     If argv has no subcommand, insert default 'train'.
     """
@@ -339,7 +347,7 @@ def main():
     parser = build_argparser()
     
     # If no subcommand is provided, default to "train"
-    ensure_default_subcommand(sys.argv, {"train", "infer", "demo"}, "train")
+    ensure_default_subcommand(sys.argv, {"train", "infer", "demo"}, "demo")
 
     args = parser.parse_args()
     if args.cmd == "train":
