@@ -132,6 +132,36 @@ def pick_monitor_by_point(sct: mss.mss, x: int, y: int) -> Tuple[int, Dict]:
             return mi, m
     return 1, sct.monitors[1]
 
+class FPSLimiter:
+    """
+    Simple FPS limiter to avoid grabbing screenshots too fast.
+    Uses perf_counter() for high-resolution timing.
+    """
+    def __init__(self, fps: float):
+        self.set_fps(fps)
+        self._next_t = time.perf_counter()
+
+    def set_fps(self, fps: float):
+        fps = float(fps)
+        if fps <= 0:
+            # fps<=0 means no limit
+            self._dt = 0.0
+        else:
+            self._dt = 1.0 / fps
+
+    def wait(self):
+        if self._dt <= 0.0:
+            return
+        now = time.perf_counter()
+        if now < self._next_t:
+            time.sleep(self._next_t - now)
+        # schedule next tick (avoid drift by moving forward in fixed steps)
+        now2 = time.perf_counter()
+        if now2 > self._next_t + 5 * self._dt:
+            # if we were paused/stalled, reset to now to avoid huge catch-up
+            self._next_t = now2 + self._dt
+        else:
+            self._next_t += self._dt
 
 def main():
     ap = argparse.ArgumentParser()
@@ -154,6 +184,7 @@ def main():
     ap.add_argument("--quality", type=int, default=92, help="JPG quality (ignored for PNG)")
     ap.add_argument("--class-name", type=str, default="skill_icon_box", help="Class name in data.yaml")
     ap.add_argument("--max-tries-per-sample", type=int, default=200, help="Retry limit per sample")
+    ap.add_argument("--fps", type=float, default=30.0, help="Screenshot capture FPS limit (default: 30). Set <=0 to disable.")
     args = ap.parse_args()
 
     neighbor_step = args.neighbor_step if args.neighbor_step > 0 else args.icon
@@ -233,6 +264,7 @@ def main():
         total_tries = 0
 
         print("[3/3] 开始生成数据集（centered crop + partial bbox + avoid neighbor centers）...")
+        limiter = FPSLimiter(cfg.fps)
         for i in range(cfg.n_samples):
             split = "train" if i in train_set else "val"
             img_dir = os.path.join(cfg.out_dir, "images", split)
@@ -297,6 +329,9 @@ def main():
                     "width": int(crop_w),
                     "height": int(crop_h),
                 }
+
+                limiter.wait()
+                
                 shot = sct.grab(grab_rect)
                 img = Image.frombytes("RGB", shot.size, shot.rgb)
 
