@@ -1,0 +1,8 @@
+## Interface: 100207
+## Title: OneKeyBindSpellViewer
+## Notes: Scan Blizzard keybindings and show bound spell IDs
+## Author: zhangsan
+## Version: 1.0.0
+## SavedVariables: OneKeyBindSpellViewerDB
+
+OneKeyBindSpellViewer.lua
