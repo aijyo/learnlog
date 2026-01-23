@@ -38,7 +38,7 @@ find_package(yaml-cpp CONFIG REQUIRED)
 #   3rd/paddle_inference/paddle/lib/...
 #   3rd/paddle_inference/third_party/...
 # =========================
-set(PADDLE_ROOT   "${CMAKE_CURRENT_SOURCE_DIR}/3rd/paddle_inference")
+set(PADDLE_ROOT   "D:/3rd/paddle_inference")
 set(PADDLE_DIR    "${PADDLE_ROOT}/paddle")
 set(PADDLE_INC    "${PADDLE_DIR}/include")
 set(PADDLE_LIBDIR "${PADDLE_DIR}/lib")

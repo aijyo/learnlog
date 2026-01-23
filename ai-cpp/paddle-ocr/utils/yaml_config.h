@@ -65,7 +65,7 @@ public:
   absl::Status FindPreProcessOp(
       const std::string &prefix = "PreProcess.transform_ops[0]") const;
   std::unordered_map<std::string, std::string> &Data() { return data_; };
-  std::string ConfigYamlPath() { return config_yaml_path_; };
+  std::string ConfigYamlPath() const { return config_yaml_path_; };
   absl::Status GetConfigYamlPaths(const std::string &model_dir);
   absl::Status LoadYamlFile();
   absl::StatusOr<std::pair<std::string, std::string>>

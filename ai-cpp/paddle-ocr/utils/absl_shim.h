@@ -31,6 +31,7 @@ enum StatusCode {
     kUnauthenticated = 16
 };
 
+
 class Status {
  public:
   Status() : code_(StatusCode::kOk) {}
@@ -48,7 +49,6 @@ class Status {
     if (!message_.empty()) oss << ": " << message_;
     return oss.str();
   }
-
  private:
   static const char* CodeToString(StatusCode code) {
     switch (code) {
@@ -142,4 +142,11 @@ inline Status OutOfRangeError(const std::string& msg) {
     return Status(kOutOfRange, msg);
 }
 
+inline Status FailedPreconditionError(std::string message) {
+    return Status(StatusCode::kFailedPrecondition, std::move(message));
+}
+
+inline Status FailedPreconditionError(const char* message) {
+    return Status(StatusCode::kFailedPrecondition, message ? std::string(message) : std::string());
+}
 }  // namespace absl
