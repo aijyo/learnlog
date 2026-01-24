@@ -495,20 +495,20 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
 
     if ((int)vk == opt_.switch_vk && kb_)
     {
-        hooking_ = !hooking_;
-        opt_.auto_spell = !hooking_;
-        if (!hooking_ )
+        //hooking_ = !hooking_;
+        opt_.auto_spell = !opt_.auto_spell;
+        if (opt_.auto_spell)
         {
             kb_->KeyUp();
-            kb_->Close();
+            //kb_->Close();
         }
         else if(kb_)
         {
-            kb_->Open(opt_.com_port);
+            //kb_->Open(opt_.com_port);
         }
     }
 
-    if (!opt_.auto_spell && hooking_ && (int)vk == opt_.trigger_vk) {
+    if (!opt_.auto_spell /*&& hooking_ */&& (int)vk == opt_.trigger_vk) {
         // English comment:
         // Remap trigger key to mapped key over serial, and swallow trigger key events.
         if (!kb_) {

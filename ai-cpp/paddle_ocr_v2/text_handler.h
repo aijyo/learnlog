@@ -80,7 +80,7 @@ private:
 private:
     Options opt_;
 
-    bool hooking_ = false;
+    //bool hooking_ = false;
     std::atomic<bool> running_{ false };
 
     // Track whether we have pressed mapped key due to trigger key,
