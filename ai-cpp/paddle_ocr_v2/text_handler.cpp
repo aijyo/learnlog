@@ -7,6 +7,7 @@
 #include <sstream>
 #include <charconv>
 #include <string>
+#include <random>
 
 TextHandler* TextHandler::s_instance_ = nullptr;
 
@@ -43,20 +44,44 @@ static void ReplaceAllInPlace_(std::string& s, const std::string& from, const st
 }
 
 void TextHandler::set_texts(std::vector<std::string>&& texts) {
-    // English comment:
-    // OCR thread calls here. We store latest texts and update mapped shortcut atomically under mutex.
-    std::string new_spec = AnalyzeShortcutFromTexts_(texts);
+    //// English comment:
+    //// OCR thread calls here. We store latest texts and update mapped shortcut atomically under mutex.
+    //std::string new_spec = AnalyzeShortcutFromTexts_(texts);
 
+    //{
+    //    std::lock_guard<std::mutex> lk(state_mu_);
+    //    latest_texts_ = std::move(texts);
+
+    //    // English comment:
+    //    // If we found a valid shortcut, update mapping.
+    //    // If not found, keep previous mapping (do not override).
+    //    if (!new_spec.empty()) {
+    //        new_shortcut_ = std::move(new_spec);
+    //    }
+    //}void TextHandler::set_texts(std::vector<std::string>&& texts) {
+    // English comment:
+    // OCR producer thread calls here. Keep it lightweight:
+    //  1) Store latest texts under lock
+    //  2) Notify the hook/message-loop thread via a custom thread message
+    //     so the actual processing (AnalyzeShortcut...) happens on that thread.
     {
         std::lock_guard<std::mutex> lk(state_mu_);
         latest_texts_ = std::move(texts);
+    }
 
-        // English comment:
-        // If we found a valid shortcut, update mapping.
-        // If not found, keep previous mapping (do not override).
-        if (!new_spec.empty()) {
-            mapped_key_spec_ = std::move(new_spec);
+    // English comment:
+    // Post a custom thread message to the message loop thread.
+    // If message loop hasn't started yet, we fallback to processing synchronously.
+    if (msg_thread_id_ != 0) {
+        if (!::PostThreadMessageW(msg_thread_id_, kMsgTextsUpdated_, 0, 0)) {
+            // English comment:
+            // PostThreadMessage can fail if the target thread has no message queue yet.
+            // Fallback to immediate processing to avoid missing updates.
+            //OnTexts_();
         }
+    }
+    else {
+        //OnTexts_();
     }
 }
 
@@ -79,27 +104,89 @@ static bool string_to_u64(const std::string& s, uint64_t& out) {
     return res.ec == std::errc() && res.ptr == s.data() + s.size();
 }
 
-std::string TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& texts) {
+static bool string_to_f32(const std::string& s, float& out) {
+    // English comment:
+    // Safe sscanf-based float parsing.
+    // Requires the entire string to be a valid float (ignoring trailing whitespace).
+
+    if (s.empty()) {
+        return false;
+    }
+
+    float value = 0.0f;
+    int consumed = 0;
+
+    // %n stores how many characters were consumed so far
+    int matched = std::sscanf(s.c_str(), " %f %n", &value, &consumed);
+
+    if (matched != 1) {
+        return false;
+    }
+
+    // English comment:
+    // Ensure the entire string was consumed (except whitespace)
+    for (size_t i = consumed; i < s.size(); ++i) {
+        if (!std::isspace(static_cast<unsigned char>(s[i]))) {
+            return false;
+        }
+    }
+
+    out = value;
+    return true;
+}
+
+
+bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& texts) {
     // English comment:
     // Try to find a shortcut-like pattern from OCR outputs.
     // We prefer the first valid shortcut found.
     text_analyze_.set_texts(texts);
-    auto strSpellid = text_analyze_.get_key("SPELL");
-    uint64_t spellid = 0;
+    auto strSpellid = text_analyze_.get_key("spell");
+
+    auto strGcd = text_analyze_.get_key("gcd");
+    auto strScd = text_analyze_.get_key("scd");
+    //auto strCtrl = text_analyze_.get_key("CTRL");
+
+    //std::string ctrl_type;
+    float gcd;
+    float scd;
+    uint64_t spellid;
+
     string_to_u64(strSpellid, spellid);
+    string_to_f32(strScd, scd);
+    string_to_f32(strGcd, gcd);
 
-    auto gcdRemain = text_analyze_.get_key("REMAIN");
-    auto scd = text_analyze_.get_key("SCD");
-    std::string cd;
-    std::string total_cd;
-    if (!scd.empty())
+    bool bAutoRun = gcd < opt_.auto_time;
+    bAutoRun = bAutoRun &&(scd < opt_.auto_time);
+    //bAutoRun = bAutoRun &&(strCtrl.empty() || strCtrl == "-");
+
     {
-        split(scd, cd, total_cd, '/');
-    }
-    auto shortcut = user_config_.GetKeyBySpellId(spellid);
 
-    // Nothing found
-    return shortcut;
+        std::lock_guard<std::mutex> lk(state_mu_);
+        //bool spell_change = spellid != spellid_;
+        //if (kb_)
+        //{
+        //    kb_->KeyUp();       // clear spellid_
+        //}
+
+        auto shortcut = user_config_.GetKeyBySpellId(spellid);
+        new_shortcut_ = shortcut;
+        bAutoRun = bAutoRun || (spellid != spellid_);
+
+        gcd_ = gcd;
+        scd_ = scd;
+        spellid_ = spellid;
+        //ctrl_type_ = ctrl_type;
+        if (opt_.auto_spell && bAutoRun && kb_ && !shortcut.empty())
+        {
+            static thread_local std::mt19937 rng{ std::random_device{}() };
+            static thread_local std::uniform_int_distribution<int> dist(10, 20);
+            kb_->TapKey(shortcut, 30+ dist(rng));
+
+        }
+    }
+
+    return bAutoRun;
 }
 
 std::string TextHandler::NormalizeShortcutSpec_(std::string s) {
@@ -192,10 +279,27 @@ std::string TextHandler::NormalizeShortcutSpec_(std::string s) {
     return out;
 }
 
+
+void TextHandler::OnTexts_()
+{
+    // Runs on message-loop/hook thread (preferred) or as a fallback on the caller thread.
+    // Copy shared state under mutex, do heavy work outside lock, then update mapping under lock.
+    std::vector<std::string> texts;
+    {
+        std::lock_guard<std::mutex> lk(state_mu_);
+        texts = latest_texts_;
+    }
+
+    bool auto_run = AnalyzeShortcutFromTexts_(texts);
+    if (!auto_run) {
+        return; // keep previous mapping
+    }
+}
+
 void TextHandler::SetMappedKey(const std::string& key_spec) {
     // English comment:
     // Update the key mapping. This controls what we send over serial when trigger key is pressed.
-    mapped_key_spec_ = key_spec.empty() ? "1" : key_spec;
+    new_shortcut_ = key_spec.empty() ? "1" : key_spec;
 }
 
 bool TextHandler::OpenSerial_() {
@@ -303,11 +407,10 @@ bool TextHandler::Start() {
 
     std::printf("[TextHandler] Running.\n");
     std::printf("[TextHandler] Trigger VK=0x%02X, mapped='%s', targetExe='%ls'\n",
-        opt_.trigger_vk, mapped_key_spec_.c_str(),
+        opt_.trigger_vk, new_shortcut_.c_str(),
         opt_.target_exe.empty() ? L"(any)" : opt_.target_exe.c_str());
     std::printf("[TextHandler] Press Ctrl+C to exit (or call Stop()).\n");
 
-    // English comment:
     // Message loop blocks current thread. If you need async, run Start() in a dedicated thread.
     RunMessageLoop_();
     return true;
@@ -329,6 +432,8 @@ void TextHandler::Stop() {
     UninstallHook_();
     CloseSerial_();
 
+    // No longer accept posted messages.
+    msg_thread_id_ = 0;
     // English comment:
     // Quit message loop if running on current thread.
     ::PostQuitMessage(0);
@@ -337,10 +442,18 @@ void TextHandler::Stop() {
 }
 
 void TextHandler::RunMessageLoop_() {
+    msg_thread_id_ = ::GetCurrentThreadId();
     MSG msg{};
     while (running_.load()) {
         int ret = GetMessageW(&msg, nullptr, 0, 0);
         if (ret > 0) {
+
+            // Handle our custom thread message (PostThreadMessage).
+            if (msg.hwnd == nullptr && msg.message == kMsgTextsUpdated_) {
+                OnTexts_();
+                continue;
+            }
+
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
             continue;
@@ -380,7 +493,22 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
     const bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
     const bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
-    if ((int)vk == opt_.trigger_vk) {
+    if ((int)vk == opt_.switch_vk && kb_)
+    {
+        hooking_ = !hooking_;
+        opt_.auto_spell = !hooking_;
+        if (!hooking_ )
+        {
+            kb_->KeyUp();
+            kb_->Close();
+        }
+        else if(kb_)
+        {
+            kb_->Open(opt_.com_port);
+        }
+    }
+
+    if (!opt_.auto_spell && hooking_ && (int)vk == opt_.trigger_vk) {
         // English comment:
         // Remap trigger key to mapped key over serial, and swallow trigger key events.
         if (!kb_) {
@@ -391,7 +519,7 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
         std::string mapped;
         {
             std::lock_guard<std::mutex> lk(state_mu_);
-            mapped = mapped_key_spec_;
+            mapped = new_shortcut_;
         }
         if (isDown) {
             // English comment:

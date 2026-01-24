@@ -1,0 +1,8 @@
+## Interface: 120000
+## Title: KeybindSpellExporter
+## Notes: Export actionbar SpellID + keybind mapping to JSON
+## Author: you
+## Version: 1.0
+## SavedVariables: KSE_Saved
+
+KeybindSpellExporter.lua

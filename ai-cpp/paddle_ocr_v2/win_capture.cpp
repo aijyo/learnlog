@@ -186,7 +186,7 @@ bool WgcRoiCapturer::TryGetLatest(BgraFrame& out)
 {
     std::lock_guard<std::mutex> lk(mtxLatest_);
     if (latest_.data.empty()) return false;
-    out = latest_;
+    out = std::move(latest_);
     return true;
 }
 

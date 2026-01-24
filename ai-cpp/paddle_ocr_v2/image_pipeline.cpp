@@ -19,6 +19,8 @@
 #include "src/modules/text_recognition/predictor.h"
 #include "src/pipelines/doc_preprocessor/pipeline.h"
 
+#include "./timer.h"
+
 _ImagePipeline::_ImagePipeline(const OCRPipelineParams& params)
     : BasePipeline(), params_(params) {
     // Same config loading as _OCRPipeline
@@ -309,16 +311,202 @@ _ImagePipeline::Predict(const std::vector<cv::Mat>& input_images) {
     return PredictImpl_(input_images, nullptr);
 }
 
+//std::vector<std::unique_ptr<BaseCVResult>>
+//_ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
+//    const std::vector<std::string>* input_paths) {
+//    Timer t(true, "text_total");
+//    auto model_settings = GetModelSettings();
+//
+//    pipeline_result_vec_.clear();
+//    std::vector<std::unique_ptr<BaseCVResult>> base_results;
+//    base_results.reserve(images.size());
+//
+//    // Process each image like "batch size = 1"
+//    for (size_t i = 0; i < images.size(); ++i) {
+//        const cv::Mat& in = images[i];
+//        if (in.empty()) {
+//            INFOW("Input image %d is empty, skip.", (int)i);
+//            OCRPipelineResult res;
+//            if (input_paths && i < input_paths->size()) res.input_path = (*input_paths)[i];
+//            res.model_settings = model_settings;
+//            res.text_det_params = text_det_params_;
+//            res.text_type = text_type_;
+//            res.text_rec_score_thresh = text_rec_score_thresh_;
+//            pipeline_result_vec_.push_back(res);
+//            base_results.push_back(std::unique_ptr<BaseCVResult>(new OCRResult(res)));
+//            continue;
+//        }
+//
+//        std::vector<cv::Mat> origin_image = { in.clone() };
+//
+//        // -------- Doc preprocessor --------
+//        std::vector<DocPreprocessorPipelineResult> doc_pre_results;
+//        if (use_doc_preprocessor_) {
+//            // IMPORTANT: current DocPreprocessor pipeline expects file paths, not cv::Mat.
+//            // We fallback to identity here to keep Mat pipeline workable.
+//            INFOW("DocPreprocessor is enabled in config, but Mat input is not supported. Fallback to identity.");
+//            DocPreprocessorPipelineResult r;
+//            r.output_image = in.clone();
+//            doc_pre_results.push_back(r);
+//        }
+//        else {
+//            DocPreprocessorPipelineResult r;
+//            r.output_image = in.clone();
+//            doc_pre_results.push_back(r);
+//        }
+//
+//        std::vector<cv::Mat> pre_images;
+//        std::vector<cv::Mat> pre_images_copy;
+//        pre_images.reserve(doc_pre_results.size());
+//        pre_images_copy.reserve(doc_pre_results.size());
+//        for (auto& item : doc_pre_results) {
+//            pre_images.push_back(item.output_image);
+//            pre_images_copy.push_back(item.output_image.clone());
+//        }
+//
+//        // -------- Detection --------
+//        {
+//            Timer t(true, "text_det_model_");
+//            text_det_model_->Predict(pre_images_copy);
+//        }
+//        std::vector<TextDetPredictorResult> det_results =
+//            static_cast<TextDetPredictor*>(text_det_model_.get())->PredictorResult();
+//
+//        std::vector<std::vector<std::vector<cv::Point2f>>> dt_polys_list;
+//        dt_polys_list.reserve(det_results.size());
+//        for (auto& item : det_results) {
+//            if (!item.dt_polys.empty()) {
+//                dt_polys_list.push_back(sort_boxes_(item.dt_polys));
+//            }
+//            else {
+//                dt_polys_list.push_back(std::vector<std::vector<cv::Point2f>>{});
+//            }
+//        }
+//
+//        // Build OCRPipelineResult shell
+//        OCRPipelineResult res;
+//        if (input_paths && i < input_paths->size()) res.input_path = (*input_paths)[i];
+//        res.doc_preprocessor_res = doc_pre_results[0];
+//        res.dt_polys = dt_polys_list.empty() ? std::vector<std::vector<cv::Point2f>>{} : dt_polys_list[0];
+//        res.model_settings = model_settings;
+//        res.text_det_params = text_det_params_;
+//        res.text_type = text_type_;
+//        res.text_rec_score_thresh = text_rec_score_thresh_;
+//
+//        // If no boxes, finalize empty result.
+//        if (dt_polys_list.empty() || dt_polys_list[0].empty()) {
+//            if (text_type_ == "general") {
+//                res.rec_boxes = ComponentsProcessor::ConvertPointsToBoxes(res.rec_polys);
+//            }
+//            pipeline_result_vec_.push_back(res);
+//            base_results.push_back(std::unique_ptr<BaseCVResult>(new OCRResult(res)));
+//            continue;
+//        }
+//
+//        // -------- Crop polys -> sub images --------
+//        auto crop_status = (*crop_by_polys_)(pre_images[0], dt_polys_list[0]);
+//        if (!crop_status.ok()) {
+//            INFOE("Split image fail : %s", crop_status.status().ToString().c_str());
+//            exit(-1);
+//        }
+//        std::vector<cv::Mat> all_subs_of_img = crop_status.value();
+//        std::vector<cv::Mat> all_subs_of_img_copy;
+//        all_subs_of_img_copy.reserve(all_subs_of_img.size());
+//        for (auto& m : all_subs_of_img) all_subs_of_img_copy.push_back(m.clone());
+//
+//        // -------- Textline orientation --------
+//        std::vector<int> angles;
+//        if (model_settings["use_textline_orientation"]) {
+//            textline_orientation_model_->Predict(all_subs_of_img_copy);
+//            auto angle_results =
+//                static_cast<ClasPredictor*>(textline_orientation_model_.get())->PredictorResult();
+//            angles.reserve(angle_results.size());
+//            for (auto& r : angle_results) angles.push_back(r.class_ids[0]);
+//
+//            auto rotated_status = RotateImage(all_subs_of_img, angles);
+//            if (!rotated_status.ok()) {
+//                INFOE("Rotate images fail : %s", rotated_status.status().ToString().c_str());
+//                exit(-1);
+//            }
+//            all_subs_of_img = rotated_status.value();
+//        }
+//        else {
+//            angles = std::vector<int>(all_subs_of_img.size(), -1);
+//        }
+//        res.textline_orientation_angles = angles;
+//
+//        // -------- Sort by aspect ratio (same as _OCRPipeline) --------
+//        std::vector<std::pair<std::pair<int, float>, TextRecPredictorResult>> sub_img_info_list;
+//        sub_img_info_list.reserve(all_subs_of_img.size());
+//        for (int m = 0; m < (int)all_subs_of_img.size(); ++m) {
+//            float ratio = (float)all_subs_of_img[m].size[1] / (float)all_subs_of_img[m].size[0];
+//            TextRecPredictorResult empty_rec;
+//            sub_img_info_list.push_back({ {m, ratio}, empty_rec });
+//        }
+//
+//        std::vector<std::pair<int, float>> sorted_subs_info;
+//        sorted_subs_info.reserve(sub_img_info_list.size());
+//        for (auto& item : sub_img_info_list) sorted_subs_info.push_back(item.first);
+//
+//        std::sort(sorted_subs_info.begin(), sorted_subs_info.end(),
+//            [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
+//                return a.second < b.second;
+//            });
+//
+//        std::vector<cv::Mat> sorted_subs_of_img;
+//        sorted_subs_of_img.reserve(sorted_subs_info.size());
+//        for (auto& item : sorted_subs_info) sorted_subs_of_img.push_back(all_subs_of_img[item.first]);
+//
+//        // -------- Recognition --------
+//        {
+//
+//            Timer t(true, "text_rec_model_");
+//            text_rec_model_->Predict(sorted_subs_of_img);
+//        }
+//        auto rec_results =
+//            static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
+//
+//        for (int m = 0; m < (int)rec_results.size(); ++m) {
+//            int sub_img_id = sorted_subs_info[m].first;
+//            sub_img_info_list[sub_img_id].second = rec_results[m];
+//        }
+//
+//        // -------- Collect outputs --------
+//        for (int sno = 0; sno < (int)sub_img_info_list.size(); ++sno) {
+//            auto rec_res = sub_img_info_list[sno].second;
+//            if (rec_res.rec_score >= text_rec_score_thresh_) {
+//                res.rec_texts.push_back(rec_res.rec_text);
+//                res.rec_scores.push_back(rec_res.rec_score);
+//                res.rec_polys.push_back(dt_polys_list[0][sno]);
+//                res.vis_fonts = rec_res.vis_font;
+//            }
+//        }
+//
+//        if (text_type_ == "general") {
+//            res.rec_boxes = ComponentsProcessor::ConvertPointsToBoxes(res.rec_polys);
+//        }
+//
+//        pipeline_result_vec_.push_back(res);
+//        base_results.push_back(std::unique_ptr<BaseCVResult>(new OCRResult(res)));
+//    }
+//
+//    return base_results;
+//}
+
 std::vector<std::unique_ptr<BaseCVResult>>
 _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
     const std::vector<std::string>* input_paths) {
+    Timer t(true, "text_total");
     auto model_settings = GetModelSettings();
 
     pipeline_result_vec_.clear();
     std::vector<std::unique_ptr<BaseCVResult>> base_results;
     base_results.reserve(images.size());
 
-    // Process each image like "batch size = 1"
+    // Toggle: if true, skip detection and treat each input image as a single-line crop.
+    //const bool rec_only = (text_type_ == "rec_only"); // or use a member flag: rec_only_
+    const bool rec_only = true;
+
     for (size_t i = 0; i < images.size(); ++i) {
         const cv::Mat& in = images[i];
         if (in.empty()) {
@@ -334,145 +522,216 @@ _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
             continue;
         }
 
-        std::vector<cv::Mat> origin_image = { in.clone() };
-
         // -------- Doc preprocessor --------
         std::vector<DocPreprocessorPipelineResult> doc_pre_results;
         if (use_doc_preprocessor_) {
-            // IMPORTANT: current DocPreprocessor pipeline expects file paths, not cv::Mat.
-            // We fallback to identity here to keep Mat pipeline workable.
             INFOW("DocPreprocessor is enabled in config, but Mat input is not supported. Fallback to identity.");
-            DocPreprocessorPipelineResult r;
-            r.output_image = in.clone();
-            doc_pre_results.push_back(r);
         }
-        else {
-            DocPreprocessorPipelineResult r;
-            r.output_image = in.clone();
-            doc_pre_results.push_back(r);
-        }
+        DocPreprocessorPipelineResult r;
+        r.output_image = in.clone();
+        doc_pre_results.push_back(r);
 
         std::vector<cv::Mat> pre_images;
-        std::vector<cv::Mat> pre_images_copy;
         pre_images.reserve(doc_pre_results.size());
-        pre_images_copy.reserve(doc_pre_results.size());
-        for (auto& item : doc_pre_results) {
-            pre_images.push_back(item.output_image);
-            pre_images_copy.push_back(item.output_image.clone());
-        }
-
-        // -------- Detection --------
-        text_det_model_->Predict(pre_images_copy);
-        std::vector<TextDetPredictorResult> det_results =
-            static_cast<TextDetPredictor*>(text_det_model_.get())->PredictorResult();
-
-        std::vector<std::vector<std::vector<cv::Point2f>>> dt_polys_list;
-        dt_polys_list.reserve(det_results.size());
-        for (auto& item : det_results) {
-            if (!item.dt_polys.empty()) {
-                dt_polys_list.push_back(sort_boxes_(item.dt_polys));
-            }
-            else {
-                dt_polys_list.push_back(std::vector<std::vector<cv::Point2f>>{});
-            }
-        }
+        for (auto& item : doc_pre_results) pre_images.push_back(item.output_image);
 
         // Build OCRPipelineResult shell
         OCRPipelineResult res;
         if (input_paths && i < input_paths->size()) res.input_path = (*input_paths)[i];
         res.doc_preprocessor_res = doc_pre_results[0];
-        res.dt_polys = dt_polys_list.empty() ? std::vector<std::vector<cv::Point2f>>{} : dt_polys_list[0];
         res.model_settings = model_settings;
         res.text_det_params = text_det_params_;
         res.text_type = text_type_;
         res.text_rec_score_thresh = text_rec_score_thresh_;
 
-        // If no boxes, finalize empty result.
-        if (dt_polys_list.empty() || dt_polys_list[0].empty()) {
-            if (text_type_ == "general") {
-                res.rec_boxes = ComponentsProcessor::ConvertPointsToBoxes(res.rec_polys);
+        // =====================================================================
+        // Rec-Only path: no detection, no crop-by-polys. Treat whole image as 1 crop.
+        // =====================================================================
+        std::vector<std::vector<std::vector<cv::Point2f>>> dt_polys_list;
+        std::vector<cv::Mat> crops_for_rec;
+
+        if (rec_only) {
+            // Build a single polygon = full image rectangle (clockwise).
+            const int w = pre_images[0].cols;
+            const int h = pre_images[0].rows;
+
+            std::vector<cv::Point2f> full_poly;
+            full_poly.reserve(4);
+            full_poly.emplace_back(0.0f, 0.0f);
+            full_poly.emplace_back((float)(w - 1), 0.0f);
+            full_poly.emplace_back((float)(w - 1), (float)(h - 1));
+            full_poly.emplace_back(0.0f, (float)(h - 1));
+
+            dt_polys_list.push_back({ full_poly });
+            res.dt_polys = dt_polys_list[0];
+
+            // Use the whole image as the only crop.
+            crops_for_rec.push_back(pre_images[0]);
+
+            // Optional: if your line images are small (e.g., 200x32), upsample height for better OCR.
+            // This DOES NOT change aspect ratio; it just scales uniformly by height.
+            if (crops_for_rec[0].rows < 48) {
+                const float scale = 48.0f / (float)crops_for_rec[0].rows;
+                cv::Mat up;
+                cv::resize(crops_for_rec[0], up, cv::Size(),
+                    (double)scale, (double)scale, cv::INTER_CUBIC);
+                crops_for_rec[0] = up;
             }
+
+            // Orientation (optional, keep consistent with your original pipeline)
+            std::vector<int> angles;
+            if (model_settings["use_textline_orientation"]) {
+                std::vector<cv::Mat> tmp = { crops_for_rec[0].clone() };
+                textline_orientation_model_->Predict(tmp);
+                auto angle_results =
+                    static_cast<ClasPredictor*>(textline_orientation_model_.get())->PredictorResult();
+                angles.reserve(angle_results.size());
+                for (auto& ar : angle_results) angles.push_back(ar.class_ids[0]);
+
+                auto rotated_status = RotateImage(crops_for_rec, angles);
+                if (!rotated_status.ok()) {
+                    INFOE("Rotate images fail : %s", rotated_status.status().ToString().c_str());
+                    exit(-1);
+                }
+                crops_for_rec = rotated_status.value();
+            }
+            else {
+                angles = std::vector<int>(crops_for_rec.size(), -1);
+            }
+            res.textline_orientation_angles = angles;
+        }
+        // =====================================================================
+        // Original Det + Crop path (unchanged)
+        // =====================================================================
+        else {
+            std::vector<cv::Mat> pre_images_copy;
+            pre_images_copy.reserve(pre_images.size());
+            for (auto& im : pre_images) pre_images_copy.push_back(im.clone());
+
+            { Timer t(true, "text_det_model_"); text_det_model_->Predict(pre_images_copy); }
+
+            std::vector<TextDetPredictorResult> det_results =
+                static_cast<TextDetPredictor*>(text_det_model_.get())->PredictorResult();
+
+            dt_polys_list.reserve(det_results.size());
+            for (auto& item : det_results) {
+                if (!item.dt_polys.empty()) dt_polys_list.push_back(sort_boxes_(item.dt_polys));
+                else dt_polys_list.push_back({});
+            }
+
+            res.dt_polys = dt_polys_list.empty() ? std::vector<std::vector<cv::Point2f>>{} : dt_polys_list[0];
+
+            if (dt_polys_list.empty() || dt_polys_list[0].empty()) {
+                if (text_type_ == "general") res.rec_boxes = ComponentsProcessor::ConvertPointsToBoxes(res.rec_polys);
+                pipeline_result_vec_.push_back(res);
+                base_results.push_back(std::unique_ptr<BaseCVResult>(new OCRResult(res)));
+                continue;
+            }
+
+            auto crop_status = (*crop_by_polys_)(pre_images[0], dt_polys_list[0]);
+            if (!crop_status.ok()) {
+                INFOE("Split image fail : %s", crop_status.status().ToString().c_str());
+                exit(-1);
+            }
+            std::vector<cv::Mat> all_subs_of_img = crop_status.value();
+
+            // Orientation
+            std::vector<int> angles;
+            if (model_settings["use_textline_orientation"]) {
+                std::vector<cv::Mat> copy;
+                copy.reserve(all_subs_of_img.size());
+                for (auto& m : all_subs_of_img) copy.push_back(m.clone());
+
+                textline_orientation_model_->Predict(copy);
+                auto angle_results =
+                    static_cast<ClasPredictor*>(textline_orientation_model_.get())->PredictorResult();
+                angles.reserve(angle_results.size());
+                for (auto& r : angle_results) angles.push_back(r.class_ids[0]);
+
+                auto rotated_status = RotateImage(all_subs_of_img, angles);
+                if (!rotated_status.ok()) {
+                    INFOE("Rotate images fail : %s", rotated_status.status().ToString().c_str());
+                    exit(-1);
+                }
+                all_subs_of_img = rotated_status.value();
+            }
+            else {
+                angles = std::vector<int>(all_subs_of_img.size(), -1);
+            }
+            res.textline_orientation_angles = angles;
+
+            // Sort by aspect ratio (same logic as before)
+            std::vector<std::pair<std::pair<int, float>, TextRecPredictorResult>> sub_img_info_list;
+            sub_img_info_list.reserve(all_subs_of_img.size());
+            for (int m = 0; m < (int)all_subs_of_img.size(); ++m) {
+                float ratio = (float)all_subs_of_img[m].size[1] / (float)all_subs_of_img[m].size[0];
+                TextRecPredictorResult empty_rec;
+                sub_img_info_list.push_back({ {m, ratio}, empty_rec });
+            }
+
+            std::vector<std::pair<int, float>> sorted_subs_info;
+            sorted_subs_info.reserve(sub_img_info_list.size());
+            for (auto& item : sub_img_info_list) sorted_subs_info.push_back(item.first);
+
+            std::sort(sorted_subs_info.begin(), sorted_subs_info.end(),
+                [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
+                    return a.second < b.second;
+                });
+
+            crops_for_rec.reserve(sorted_subs_info.size());
+            for (auto& item : sorted_subs_info) crops_for_rec.push_back(all_subs_of_img[item.first]);
+
+            // Rec
+            { Timer t(true, "text_rec_model_"); text_rec_model_->Predict(crops_for_rec); }
+            auto rec_results = static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
+
+            for (int m = 0; m < (int)rec_results.size(); ++m) {
+                int sub_img_id = sorted_subs_info[m].first;
+                sub_img_info_list[sub_img_id].second = rec_results[m];
+            }
+
+            for (int sno = 0; sno < (int)sub_img_info_list.size(); ++sno) {
+                auto rec_res = sub_img_info_list[sno].second;
+                if (rec_res.rec_score >= text_rec_score_thresh_) {
+                    res.rec_texts.push_back(rec_res.rec_text);
+                    res.rec_scores.push_back(rec_res.rec_score);
+                    res.rec_polys.push_back(dt_polys_list[0][sno]);
+                    res.vis_fonts = rec_res.vis_font;
+                }
+            }
+
+            if (text_type_ == "general") res.rec_boxes = ComponentsProcessor::ConvertPointsToBoxes(res.rec_polys);
+
             pipeline_result_vec_.push_back(res);
             base_results.push_back(std::unique_ptr<BaseCVResult>(new OCRResult(res)));
             continue;
         }
 
-        // -------- Crop polys -> sub images --------
-        auto crop_status = (*crop_by_polys_)(pre_images[0], dt_polys_list[0]);
-        if (!crop_status.ok()) {
-            INFOE("Split image fail : %s", crop_status.status().ToString().c_str());
-            exit(-1);
+        // =========================
+        // Rec stage for Rec-Only path
+        // =========================
+        {
+            Timer t(true, "text_rec_model_");
+            text_rec_model_->Predict(crops_for_rec);
         }
-        std::vector<cv::Mat> all_subs_of_img = crop_status.value();
-        std::vector<cv::Mat> all_subs_of_img_copy;
-        all_subs_of_img_copy.reserve(all_subs_of_img.size());
-        for (auto& m : all_subs_of_img) all_subs_of_img_copy.push_back(m.clone());
+        auto rec_results = static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
 
-        // -------- Textline orientation --------
-        std::vector<int> angles;
-        if (model_settings["use_textline_orientation"]) {
-            textline_orientation_model_->Predict(all_subs_of_img_copy);
-            auto angle_results =
-                static_cast<ClasPredictor*>(textline_orientation_model_.get())->PredictorResult();
-            angles.reserve(angle_results.size());
-            for (auto& r : angle_results) angles.push_back(r.class_ids[0]);
-
-            auto rotated_status = RotateImage(all_subs_of_img, angles);
-            if (!rotated_status.ok()) {
-                INFOE("Rotate images fail : %s", rotated_status.status().ToString().c_str());
-                exit(-1);
-            }
-            all_subs_of_img = rotated_status.value();
-        }
-        else {
-            angles = std::vector<int>(all_subs_of_img.size(), -1);
-        }
-        res.textline_orientation_angles = angles;
-
-        // -------- Sort by aspect ratio (same as _OCRPipeline) --------
-        std::vector<std::pair<std::pair<int, float>, TextRecPredictorResult>> sub_img_info_list;
-        sub_img_info_list.reserve(all_subs_of_img.size());
-        for (int m = 0; m < (int)all_subs_of_img.size(); ++m) {
-            float ratio = (float)all_subs_of_img[m].size[1] / (float)all_subs_of_img[m].size[0];
-            TextRecPredictorResult empty_rec;
-            sub_img_info_list.push_back({ {m, ratio}, empty_rec });
-        }
-
-        std::vector<std::pair<int, float>> sorted_subs_info;
-        sorted_subs_info.reserve(sub_img_info_list.size());
-        for (auto& item : sub_img_info_list) sorted_subs_info.push_back(item.first);
-
-        std::sort(sorted_subs_info.begin(), sorted_subs_info.end(),
-            [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
-                return a.second < b.second;
-            });
-
-        std::vector<cv::Mat> sorted_subs_of_img;
-        sorted_subs_of_img.reserve(sorted_subs_info.size());
-        for (auto& item : sorted_subs_info) sorted_subs_of_img.push_back(all_subs_of_img[item.first]);
-
-        // -------- Recognition --------
-        text_rec_model_->Predict(sorted_subs_of_img);
-        auto rec_results =
-            static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
-
-        for (int m = 0; m < (int)rec_results.size(); ++m) {
-            int sub_img_id = sorted_subs_info[m].first;
-            sub_img_info_list[sub_img_id].second = rec_results[m];
-        }
-
-        // -------- Collect outputs --------
-        for (int sno = 0; sno < (int)sub_img_info_list.size(); ++sno) {
-            auto rec_res = sub_img_info_list[sno].second;
-            if (rec_res.rec_score >= text_rec_score_thresh_) {
-                res.rec_texts.push_back(rec_res.rec_text);
-                res.rec_scores.push_back(rec_res.rec_score);
-                res.rec_polys.push_back(dt_polys_list[0][sno]);
-                res.vis_fonts = rec_res.vis_font;
+        // We only have one crop in rec-only mode.
+        if (!rec_results.empty()) {
+            const auto& rr = rec_results[0];
+            if (rr.rec_score >= text_rec_score_thresh_) {
+                res.rec_texts.push_back(rr.rec_text);
+                res.rec_scores.push_back(rr.rec_score);
+                // Use the full image polygon as the recognized polygon.
+                if (!dt_polys_list.empty() && !dt_polys_list[0].empty()) {
+                    res.rec_polys.push_back(dt_polys_list[0][0]);
+                }
+                res.vis_fonts = rr.vis_font;
             }
         }
 
-        if (text_type_ == "general") {
+        if (text_type_ == "general" || rec_only) {
+            // In rec-only mode, rec_boxes will be a single full-rect box if rec_polys exists.
             res.rec_boxes = ComponentsProcessor::ConvertPointsToBoxes(res.rec_polys);
         }
 
@@ -485,6 +744,7 @@ _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
 
 std::vector<std::unique_ptr<BaseCVResult>>
 ImagePipeline::Predict(const std::vector<cv::Mat>& input) {
+
     if (thread_num_ == 1) {
         // Downcast to our impl that supports Mat
         return static_cast<_ImagePipeline*>(infer_.get())->Predict(input);

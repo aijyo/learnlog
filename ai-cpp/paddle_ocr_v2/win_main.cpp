@@ -202,7 +202,8 @@ int main(int argc, char** argv)
     // --------- Config (adjust to your project) ----------
     const std::string base_dir = R"(D:\code\gitcode\PaddleOCR\deploy\cpp_infer\wow)";
     std::string det_dir = base_dir + R"(\PP-OCRv5_mobile_det_infer)";
-    std::string rec_dir = base_dir + R"(\PP-OCRv5_mobile_rec_infer)";
+    //std::string rec_dir = base_dir + R"(\PP-OCRv5_mobile_rec_infer)";
+    std::string rec_dir = base_dir + R"(\en_PP-OCRv4_mobile_rec_infer)";
     std::string cls_dir = "";   // optional
     std::string dict_path = ""; // optional
     int cpu_threads = 4;
@@ -243,18 +244,19 @@ int main(int argc, char** argv)
         config.text_detection_model_name = "PP-OCRv5_mobile_det";
 
         config.text_recognition_model_dir = rec_dir;
-        config.text_recognition_model_name = "PP-OCRv5_mobile_rec";
+        config.text_recognition_model_name = "en_PP-OCRv4_mobile_rec";
+        //config.text_recognition_model_name = "PP-OCRv5_mobile_rec";
 
         config.use_doc_orientation_classify = false;
         config.use_doc_unwarping = false;
         config.use_textline_orientation = false;
 
         config.device = "cpu";
-        config.cpu_threads = 4;
+        config.cpu_threads = 1;
         config.thread_num = 1;
 
         config.precision = "fp32";
-        config.enable_mkldnn = true;
+        config.enable_mkldnn = false;
         config.mkldnn_cache_capacity = 10;
 
         config.lang = "eng";
@@ -283,6 +285,8 @@ int main(int argc, char** argv)
     th_opt.wait_ack = true;
     th_opt.debug = false;
     th_opt.trigger_vk = 'X';          // default trigger key = '1'
+    th_opt.switch_vk = VK_F12;
+    th_opt.auto_spell = true;
     // th_opt.target_exe = L"Wow.exe"; // optional
     th_opt.user_config = R"(D:\code\gitcode\PaddleOCR\deploy\cpp_infer\wow\user_keybinds.json)";
 

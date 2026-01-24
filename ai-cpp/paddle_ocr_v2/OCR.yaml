@@ -3,8 +3,8 @@ pipeline_name: OCR
 
 text_type: general
 
-use_doc_preprocessor: True
-use_textline_orientation: True
+use_doc_preprocessor: False
+use_textline_orientation: False
 
 SubPipelines:
   DocPreprocessor:
