@@ -13,10 +13,10 @@ namespace utils
             result = AutoMode::kAutoSpell;
             break;
         case utils::AutoMode::kAutoSpell:
-            result = AutoMode::kHalfAuto;
+            result = AutoMode::kAssistant;
             break;
         case utils::AutoMode::kHalfAuto:
-            result = AutoMode::kHalfAuto;
+            result = AutoMode::kAssistant;
             break;
         default:
             break;

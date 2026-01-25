@@ -200,7 +200,7 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
         scd_ = scd;
         spellid_ = spellid;
         //ctrl_type_ = ctrl_type;
-        bool auto_mod = utils::is_equal(opt_.auto_type, utils::AutoMode::kAutoSpell);
+        bool auto_mod = utils::is_equal(opt_.auto_mode, utils::AutoMode::kAutoSpell);
         if (auto_mod && bAutoRun && kb_ && !shortcut.empty())
         {
             static thread_local std::mt19937 rng{ std::random_device{}() };
@@ -542,8 +542,8 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
     if ((int)vk == opt_.switch_vk && kb_ && isDown)
     {
         //hooking_ = !hooking_;
-        bool auto_mode = utils::is_equal(opt_.auto_type, utils::AutoMode::kAutoSpell);
-        opt_.auto_type = utils::next_mode(opt_.auto_type);
+        bool auto_mode = utils::is_equal(opt_.auto_mode, utils::AutoMode::kAutoSpell);
+        opt_.auto_mode = utils::next_mode(opt_.auto_mode);
         if (!auto_mode )
         {
             kb_->KeyUp();
@@ -553,10 +553,10 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
         {
             //kb_->Open(opt_.com_port);
         }
-        printf("change mode %s\n",  utils::to_string(opt_.auto_type).c_str());
+        printf("change mode %s\n",  utils::to_string(opt_.auto_mode).c_str());
     }
 
-    bool ass_mode = utils::is_equal(opt_.auto_type, utils::AutoMode::kAssistant);
+    bool ass_mode = utils::is_equal(opt_.auto_mode, utils::AutoMode::kAssistant);
     if (ass_mode /*&& hooking_ */&& (int)vk == opt_.trigger_vk) {
 
         std::string mapped;

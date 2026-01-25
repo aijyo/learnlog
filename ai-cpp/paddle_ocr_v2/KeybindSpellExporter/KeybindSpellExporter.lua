@@ -232,6 +232,30 @@ local function EnumerateActionButtons_()
     return list
 end
 
+-- Normalize WoW keybind formatting:
+-- WoW uses '-' between modifiers and key (e.g., "ALT-2"). We want "ALT+2".
+-- IMPORTANT: Do NOT replace '-' inside key names like "NUMPAD-" or other tokens.
+local function NormalizeKeybindPlus_(s)
+    if not s or s == "" then return s end
+
+    -- Multiple bindings can be separated by comma: "ALT-2,SHIFT-3"
+    local parts = { strsplit(",", s) }
+    for i = 1, #parts do
+        local p = (parts[i] or ""):gsub("^%s+", ""):gsub("%s+$", "")
+
+        -- Only convert modifier separators, keep key names intact (e.g., NUMPAD-)
+        p = p:gsub("ALT%-", "ALT+")
+             :gsub("CTRL%-", "CTRL+")
+             :gsub("SHIFT%-", "SHIFT+")
+             :gsub("CMD%-", "CMD+")
+             :gsub("META%-", "META+")
+
+        parts[i] = p
+    end
+
+    return table.concat(parts, ",")
+end
+
 -- =========================================================
 -- Export
 -- Output JSON: { "<spellId>": {slotId=xx, key="SHIFT-2", name="xxx"} , ... }
@@ -255,7 +279,7 @@ local function ExportSpellKeybindJson_()
                 local spellName = GetSpellNameCompat and GetSpellNameCompat(spellId) or nil
                 local rec = {
                     slotId = slotId,
-                    key = keybind,
+                    key = NormalizeKeybindPlus_(keybind),
                     name = spellName or "",
                     button = btnName or "",
                 }

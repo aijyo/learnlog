@@ -20,7 +20,7 @@ public:
         uint8_t addr = 0x00;
         bool wait_ack = true;
         bool debug = false;
-        utils::AutoMode auto_type = utils::AutoMode::kAssistant;
+        utils::AutoMode auto_mode = utils::AutoMode::kAssistant;
         float auto_time = 0.6; //600ms;
         // auto break
         bool auto_break = false;

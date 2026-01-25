@@ -220,7 +220,7 @@ namespace wowapp {
         bool debug = false;
         int trigger_vk = (int)'X';
         int switch_vk = (int)VK_F12;
-        int auto_type = 0;
+        int auto_mode = 0;
         int delay_time = 300;     // 300ms perframe
         int auto_time = 300;     // 300ms perframe
         int break_time = 300;     // 300ms perframe
@@ -299,7 +299,7 @@ namespace wowapp {
                 auto& h = cfg["hotkeys"];
                 if (h.contains("trigger_vk")) out.trigger_vk = h["trigger_vk"].get<int>();
                 if (h.contains("switch_vk")) out.switch_vk = h["switch_vk"].get<int>();
-                if (h.contains("auto_type")) out.auto_type = h["auto_type"].get<int>();
+                if (h.contains("auto_mode")) out.auto_mode = h["auto_mode"].get<int>();
                 if (h.contains("delay_time")) out.delay_time = h["delay_time"].get<int>();
                 if (h.contains("break_time")) out.break_time = h["break_time"].get<int>();
                 if (h.contains("auto_time")) out.auto_time = h["auto_time"].get<int>();
@@ -419,7 +419,7 @@ namespace wowapp {
         th_opt.debug = cfg.debug;
         th_opt.trigger_vk = (UINT)cfg.trigger_vk;
         th_opt.switch_vk = (UINT)cfg.switch_vk;
-        th_opt.auto_type = (utils::AutoMode)cfg.auto_type;
+        th_opt.auto_mode = (utils::AutoMode)cfg.auto_mode;
         th_opt.auto_time = cfg.auto_time / 1000.0f;
         th_opt.break_time = cfg.break_time / 1000.0f;
         th_opt.user_config = cfg.user_keybinds_path;

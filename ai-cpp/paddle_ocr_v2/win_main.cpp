@@ -170,7 +170,7 @@
 //        bool debug = false;
 //        int trigger_vk = (int)'X';
 //        int switch_vk = (int)VK_F12;
-//        bool auto_type = true;
+//        bool auto_mode = true;
 //
 //        // Keybind map
 //        std::string user_keybinds_path;
@@ -243,7 +243,7 @@
 //                auto& h = cfg["hotkeys"];
 //                if (h.contains("trigger_vk")) out.trigger_vk = h["trigger_vk"].get<int>();
 //                if (h.contains("switch_vk")) out.switch_vk = h["switch_vk"].get<int>();
-//                if (h.contains("auto_type")) out.auto_type = h["auto_type"].get<bool>();
+//                if (h.contains("auto_mode")) out.auto_mode = h["auto_mode"].get<bool>();
 //            }
 //
 //            if (cfg.contains("user_keybinds_path")) {
@@ -360,7 +360,7 @@
 //        th_opt.debug = cfg.debug;
 //        th_opt.trigger_vk = (UINT)cfg.trigger_vk;
 //        th_opt.switch_vk = (UINT)cfg.switch_vk;
-//        th_opt.auto_type = cfg.auto_type;
+//        th_opt.auto_mode = cfg.auto_mode;
 //        th_opt.user_config = cfg.user_keybinds_path;
 //
 //        st.handler = std::make_unique<TextHandler>(th_opt);
