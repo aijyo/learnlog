@@ -347,32 +347,32 @@ std::string TextAnalyze::get_key(const std::string& key) const {
     if (it == kv_.end()) return std::string();
     return it->second;
 }
-
-int TextAnalyze::target() const
-{
-    return target_;
-}
-
-std::string TextAnalyze::target_str(int target/* = -1*/) const
-{
-    if(target < 0) target = target_;
-
-    switch (target)
-    {
-    case 0:
-        return "NO_TARGET";
-    case 1:
-        return "FRIENDLY";
-    case 2:
-        return "HOSTILE_NPC";
-    case 3:
-        return "HOSTILE_PLAYER";
-    case 4:
-        return "NEUTRAL";
-    default:
-        return "UNKNOWN";
-    }
-}
+//
+//int TextAnalyze::target() const
+//{
+//    return target_;
+//}
+//
+//std::string TextAnalyze::target_str(int target/* = -1*/) const
+//{
+//    if(target < 0) target = target_;
+//
+//    switch (target)
+//    {
+//    case 0:
+//        return "NO_TARGET";
+//    case 1:
+//        return "FRIENDLY";
+//    case 2:
+//        return "HOSTILE_NPC";
+//    case 3:
+//        return "HOSTILE_PLAYER";
+//    case 4:
+//        return "NEUTRAL";
+//    default:
+//        return "UNKNOWN";
+//    }
+//}
 
 bool TextAnalyze::has_key(const std::string& key) const {
     return kv_.find(key) != kv_.end();
@@ -393,7 +393,7 @@ void TextAnalyze::parse_line(const std::string& line) {
     // 2) Split by '='
     auto parts = SplitNonEmpty(norm, '=');
     if (parts.size() < 3) {
-        // Not enough tokens for "a=b=c"
+        printf("parse line faild: %s\n", norm.c_str());
         return;
     }
 
@@ -403,23 +403,31 @@ void TextAnalyze::parse_line(const std::string& line) {
     std::string a = parts[0];
     std::string b = parts[1];
     std::string c = parts[2];
-    //0	没有目标
-    //    1	友方目标（Friend）
-    //    2	敌对 NPC
-    //    3	敌对 玩家
-    //    4	中立 / 不可攻击 / 其它
-    std::string d = parts[3];
+    ////0	没有目标
+    ////    1	友方目标（Friend）
+    ////    2	敌对 NPC
+    ////    3	敌对 玩家
+    ////    4	中立 / 不可攻击 / 其它
+    //std::string d = parts[3];
+    // target casting remain(for break)
+    std::string e;
+    if (parts.size() > 3)
+    {
+        e = parts[3];
+    }
 
     TrimDots(a);
     TrimDots(b);
     TrimDots(c);
-    TrimDots(d);
+    //TrimDots(d);
+    TrimDots(e);
 
     // 3) Validate tokens
     if (!IsValidNumberToken(a, keep_minus)) return;
     if (!IsValidNumberToken(b, keep_minus)) return;
     if (!IsValidNumberToken(c, keep_minus)) return;
-    if (!IsValidNumberToken(d, keep_minus)) return;
+    //if (!IsValidNumberToken(d, keep_minus)) return;
+    if (!e.empty() && !IsValidNumberToken(e, keep_minus)) return;
 
     // 4) Store: key = a, value = "b=c"
     // This fits your existing get_key/has_key API.
@@ -428,7 +436,9 @@ void TextAnalyze::parse_line(const std::string& line) {
     kv_["spell"] = a;
     kv_["gcd"] = b;
     kv_["scd"] = c;
-    kv_["target"] = d;
-    target_ = d.empty() ? 0 : d[0] - '0';
+    //kv_["target"] = d;
+    kv_["tremain"] = e;
+
+    //target_ = d.empty() ? 0 : d[0] - '0';
 
 }

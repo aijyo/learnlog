@@ -9,6 +9,8 @@
 #include <string>
 #include <random>
 
+#include "common_def.h"
+
 TextHandler* TextHandler::s_instance_ = nullptr;
 
 TextHandler::TextHandler(const Options& opt)
@@ -147,17 +149,20 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
 
     auto strGcd = text_analyze_.get_key("gcd");
     auto strScd = text_analyze_.get_key("scd");
-    auto target = text_analyze_.target();
+    //auto target = text_analyze_.target();
+    auto strTRemain = text_analyze_.get_key("tremain");
     //auto strCtrl = text_analyze_.get_key("CTRL");
 
     //std::string ctrl_type;
-    float gcd;
-    float scd;
+    float gcd = .0f;
+    float scd= .0f;
+    float tremain = .0f;
     uint64_t spellid;
 
     string_to_u64(strSpellid, spellid);
     string_to_f32(strScd, scd);
     string_to_f32(strGcd, gcd);
+    string_to_f32(strTRemain, tremain);
 
     bool bAutoRun = gcd < opt_.auto_time;
     bAutoRun = bAutoRun &&(scd < opt_.auto_time);
@@ -176,7 +181,7 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
 
         if (shortcut.empty())
         {
-            printf("recognized empty shortcut spelld[%d] \n", spellid);
+            printf("recognized empty shortcut spelld[%llu] \n", spellid);
         }
         if (new_shortcut_ != shortcut)
         {
@@ -188,20 +193,30 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
         bool debug = false;
         if (bAutoRun && debug)
         {
-            printf("Recognized new gcd[%f] new scd[%f] new spell[%d] changed[%s]\n", gcd, scd, spellid, bAutoRun ? "new" : "same");
-            printf("Recognized old gcd[%f] old scd[%f] old spell[%d] \n", gcd, scd, spellid);
+            printf("Recognized new gcd[%f] new scd[%f] new spell[%llu] changed[%s]\n", gcd, scd, spellid, bAutoRun ? "new" : "same");
+            printf("Recognized old gcd[%f] old scd[%f] old spell[%llu] \n", gcd, scd, spellid);
         }
         gcd_ = gcd;
         scd_ = scd;
         spellid_ = spellid;
         //ctrl_type_ = ctrl_type;
-        if (opt_.auto_spell && bAutoRun && kb_ && !shortcut.empty())
+        bool auto_mod = utils::is_equal(opt_.auto_type, utils::AutoMode::kAutoSpell);
+        if (auto_mod && bAutoRun && kb_ && !shortcut.empty())
         {
             static thread_local std::mt19937 rng{ std::random_device{}() };
             static thread_local std::uniform_int_distribution<int> dist(0, 20);
             auto delay = 30 + dist(rng);
-            printf("auto spell[%d] tap[%d] shortcut[%s] target[%s]\n", spellid_, delay, shortcut.c_str(), text_analyze_.target_str().c_str());
-            kb_->TapKey(shortcut, 30+ dist(rng));
+
+            if (opt_.auto_break && tremain < opt_.break_time)
+            {
+                printf("auto break treamin[%f] tap[%d] break_shortcut[%s] \n", tremain, delay, opt_.break_shortcut.c_str());
+                kb_->TapKey(shortcut, 30 + dist(rng));
+            }
+            else
+            {
+                printf("auto spell[%llu] tap[%d] shortcut[%s] \n", spellid_, delay, shortcut.c_str());
+                kb_->TapKey(shortcut, 30 + dist(rng));
+            }
 
         }
     }
@@ -442,7 +457,18 @@ void TextHandler::Stop() {
 
     running_.store(false);
 
-    // English comment:
+    // Ask the message loop thread to exit by posting WM_QUIT to that thread.
+    DWORD tid = msg_thread_id_;
+    if (tid != 0) {
+        if (!::PostThreadMessageW(tid, WM_QUIT, 0, 0)) {
+            // English comment:
+            // If this fails, the message queue might not be created yet.
+            // Consider forcing queue creation in RunMessageLoop_ with PeekMessage,
+            // or use a fallback wake-up message.
+            std::printf("[TextHandler] PostThreadMessage(WM_QUIT) failed, err=%lu\n",
+                ::GetLastError());
+        }
+    }
     // Release any pressed mapped key.
     if (kb_) {
         kb_->KeyUp();
@@ -456,7 +482,7 @@ void TextHandler::Stop() {
     msg_thread_id_ = 0;
     // English comment:
     // Quit message loop if running on current thread.
-    ::PostQuitMessage(0);
+    //::PostQuitMessage(0);
 
     std::printf("[TextHandler] Stopped.\n");
 }
@@ -516,8 +542,9 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
     if ((int)vk == opt_.switch_vk && kb_ && isDown)
     {
         //hooking_ = !hooking_;
-        opt_.auto_spell = !opt_.auto_spell;
-        if (opt_.auto_spell)
+        bool auto_mode = utils::is_equal(opt_.auto_type, utils::AutoMode::kAutoSpell);
+        opt_.auto_type = utils::next_mode(opt_.auto_type);
+        if (!auto_mode )
         {
             kb_->KeyUp();
             //kb_->Close();
@@ -526,16 +553,17 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
         {
             //kb_->Open(opt_.com_port);
         }
-        printf("change mode %\n", opt_.auto_spell ? "auto spell" : "assistant spell");
+        printf("change mode %s\n",  utils::to_string(opt_.auto_type).c_str());
     }
 
-    if (!opt_.auto_spell /*&& hooking_ */&& (int)vk == opt_.trigger_vk) {
+    bool ass_mode = utils::is_equal(opt_.auto_type, utils::AutoMode::kAssistant);
+    if (ass_mode /*&& hooking_ */&& (int)vk == opt_.trigger_vk) {
 
         std::string mapped;
         {
             std::lock_guard<std::mutex> lk(state_mu_);
             mapped = std::move(new_shortcut_);
-            printf("Consume shortcut %\n", mapped.empty()? "empty" : mapped.c_str());
+            printf("Consume shortcut %s\n", mapped.empty()? "empty" : mapped.c_str());
         }
 
         // Remap trigger key to mapped key over serial, and swallow trigger key events.

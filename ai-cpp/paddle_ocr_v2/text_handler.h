@@ -9,6 +9,7 @@
 
 #include "./text_analyze.h"
 #include "./user_config.h"
+#include "./common_def.h"
 class KeyboardControl;
 
 class TextHandler {
@@ -19,13 +20,19 @@ public:
         uint8_t addr = 0x00;
         bool wait_ack = true;
         bool debug = false;
-        bool auto_spell = false;
-        float auto_time = 0.1; //100ms;
+        utils::AutoMode auto_type = utils::AutoMode::kAssistant;
+        float auto_time = 0.6; //600ms;
+        // auto break
+        bool auto_break = false;
+        float break_time = 0.7; //  break when remain < 400ms, <0 mean break when < (gcd)
+        std::string break_shortcut = "F5";
 
         // Trigger key: default '1'
         // Use VK_1 / '1' (0x31) for main keyboard number row.
         int trigger_vk = '1';
+        bool ignore_trigger_case = false;
         int switch_vk = VK_F12;
+        bool ignore_switch_case = false;
 
         // Optional: only active when foreground exe == target_exe (empty means any)
         std::wstring target_exe;

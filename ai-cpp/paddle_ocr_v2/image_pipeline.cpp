@@ -717,7 +717,7 @@ _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
         // Rec stage for Rec-Only path
         // =========================
         {
-            //Timer t(true, "text_rec_model_");
+            Timer t(true, "text_rec_model_");
             text_rec_model_->Predict(crops_for_rec);
         }
         auto rec_results = static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
