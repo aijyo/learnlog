@@ -105,13 +105,16 @@ static std::vector<std::string> recognition_image_(ImagePipeline& ocr, const cv:
 
         auto&& texts = ocr->Texts();
         results = texts;
-        printf("==============begin==============\n");
-        for (auto index = 0; index < texts.size(); ++index)
+        bool debug = false;
+        if (debug)
         {
-            printf("image content line[%d]: %s\n\n\n\n", index, texts[index].c_str());
+            printf("==============begin==============\n");
+            for (auto index = 0; index < texts.size(); ++index)
+            {
+                printf("image content line[%d]: %s\n", index, texts[index].c_str());
+            }
+            printf("==============end==============\n");
         }
-
-        printf("==============end==============\n");
 
         //auto content = ocr->Str();
         //printf("image content: %s\n\n\n\n", rt_info.front()->Str().c_str());
@@ -213,7 +216,7 @@ int main(int argc, char** argv)
     // 1) Select region in virtual-screen coordinates
     RECT rcVirtual{};
     {
-        ScreenRegionSelector selector(720, 640);
+        ScreenRegionSelector selector(256, 48);
         if (!selector.SelectRegionVirtual(rcVirtual))
         {
             MessageBoxW(nullptr, L"Selection canceled or invalid.", L"Info", MB_OK);

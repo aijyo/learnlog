@@ -78,10 +78,12 @@ void TextHandler::set_texts(std::vector<std::string>&& texts) {
             // PostThreadMessage can fail if the target thread has no message queue yet.
             // Fallback to immediate processing to avoid missing updates.
             //OnTexts_();
+            printf("PostThreadMessageW Failed\n");
         }
     }
     else {
         //OnTexts_();
+        printf("PostThreadMessageW Failed [msg_thread_id is 0]\n");
     }
 }
 
@@ -145,6 +147,7 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
 
     auto strGcd = text_analyze_.get_key("gcd");
     auto strScd = text_analyze_.get_key("scd");
+    auto target = text_analyze_.target();
     //auto strCtrl = text_analyze_.get_key("CTRL");
 
     //std::string ctrl_type;
@@ -166,13 +169,28 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
         //bool spell_change = spellid != spellid_;
         //if (kb_)
         //{
-        //    kb_->KeyUp();       // clear spellid_
+        //    kb_->KeyUp();       // clear spellid_333
         //}
 
         auto shortcut = user_config_.GetKeyBySpellId(spellid);
+
+        if (shortcut.empty())
+        {
+            printf("recognized empty shortcut spelld[%d] \n", spellid);
+        }
+        if (new_shortcut_ != shortcut)
+        {
+            printf("recognized new shortcut[%s]\n", shortcut.empty() ? "empty" : shortcut.c_str());
+        }
         new_shortcut_ = shortcut;
         bAutoRun = bAutoRun || (spellid != spellid_);
 
+        bool debug = false;
+        if (bAutoRun && debug)
+        {
+            printf("Recognized new gcd[%f] new scd[%f] new spell[%d] changed[%s]\n", gcd, scd, spellid, bAutoRun ? "new" : "same");
+            printf("Recognized old gcd[%f] old scd[%f] old spell[%d] \n", gcd, scd, spellid);
+        }
         gcd_ = gcd;
         scd_ = scd;
         spellid_ = spellid;
@@ -180,7 +198,9 @@ bool TextHandler::AnalyzeShortcutFromTexts_(const std::vector<std::string>& text
         if (opt_.auto_spell && bAutoRun && kb_ && !shortcut.empty())
         {
             static thread_local std::mt19937 rng{ std::random_device{}() };
-            static thread_local std::uniform_int_distribution<int> dist(10, 20);
+            static thread_local std::uniform_int_distribution<int> dist(0, 20);
+            auto delay = 30 + dist(rng);
+            printf("auto spell[%d] tap[%d] shortcut[%s] target[%s]\n", spellid_, delay, shortcut.c_str(), text_analyze_.target_str().c_str());
             kb_->TapKey(shortcut, 30+ dist(rng));
 
         }
@@ -493,7 +513,7 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
     const bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
     const bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
-    if ((int)vk == opt_.switch_vk && kb_)
+    if ((int)vk == opt_.switch_vk && kb_ && isDown)
     {
         //hooking_ = !hooking_;
         opt_.auto_spell = !opt_.auto_spell;
@@ -506,21 +526,24 @@ LRESULT TextHandler::OnKeyboardEvent_(int nCode, WPARAM wParam, LPARAM lParam) {
         {
             //kb_->Open(opt_.com_port);
         }
+        printf("change mode %\n", opt_.auto_spell ? "auto spell" : "assistant spell");
     }
 
     if (!opt_.auto_spell /*&& hooking_ */&& (int)vk == opt_.trigger_vk) {
-        // English comment:
-        // Remap trigger key to mapped key over serial, and swallow trigger key events.
-        if (!kb_) {
-            // No serial -> don't swallow to avoid breaking user input unexpectedly.
-            return ::CallNextHookEx((HHOOK)hook_, nCode, wParam, lParam);
-        }
 
         std::string mapped;
         {
             std::lock_guard<std::mutex> lk(state_mu_);
-            mapped = new_shortcut_;
+            mapped = std::move(new_shortcut_);
+            printf("Consume shortcut %\n", mapped.empty()? "empty" : mapped.c_str());
         }
+
+        // Remap trigger key to mapped key over serial, and swallow trigger key events.
+        if (!kb_ || (isDown&&mapped.empty())) {
+            // No serial -> don't swallow to avoid breaking user input unexpectedly.
+            return ::CallNextHookEx((HHOOK)hook_, nCode, wParam, lParam);
+        }
+
         if (isDown) {
             // English comment:
             // Forward every trigger keydown (including auto-repeat) as mapped keydown.

@@ -496,7 +496,7 @@ _ImagePipeline::Predict(const std::vector<cv::Mat>& input_images) {
 std::vector<std::unique_ptr<BaseCVResult>>
 _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
     const std::vector<std::string>* input_paths) {
-    Timer t(true, "text_total");
+    //Timer t(true, "text_total");
     auto model_settings = GetModelSettings();
 
     pipeline_result_vec_.clear();
@@ -608,7 +608,10 @@ _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
             pre_images_copy.reserve(pre_images.size());
             for (auto& im : pre_images) pre_images_copy.push_back(im.clone());
 
-            { Timer t(true, "text_det_model_"); text_det_model_->Predict(pre_images_copy); }
+            {
+                //Timer t(true, "text_det_model_"); 
+                text_det_model_->Predict(pre_images_copy);
+            }
 
             std::vector<TextDetPredictorResult> det_results =
                 static_cast<TextDetPredictor*>(text_det_model_.get())->PredictorResult();
@@ -682,7 +685,10 @@ _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
             for (auto& item : sorted_subs_info) crops_for_rec.push_back(all_subs_of_img[item.first]);
 
             // Rec
-            { Timer t(true, "text_rec_model_"); text_rec_model_->Predict(crops_for_rec); }
+            { 
+                //Timer t(true, "text_rec_model_"); 
+                text_rec_model_->Predict(crops_for_rec);
+            }
             auto rec_results = static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
 
             for (int m = 0; m < (int)rec_results.size(); ++m) {
@@ -711,7 +717,7 @@ _ImagePipeline::PredictImpl_(const std::vector<cv::Mat>& images,
         // Rec stage for Rec-Only path
         // =========================
         {
-            Timer t(true, "text_rec_model_");
+            //Timer t(true, "text_rec_model_");
             text_rec_model_->Predict(crops_for_rec);
         }
         auto rec_results = static_cast<TextRecPredictor*>(text_rec_model_.get())->PredictorResult();
