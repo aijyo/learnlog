@@ -28,9 +28,8 @@ namespace utils
 
     bool is_equal(AutoMode l, AutoMode r)
     {
-        return ((int)l & (int)r) == 0;
+        return ((int)l & (int)r) != 0;
     }
-
 
     std::string to_string(AutoMode mode)
     {
